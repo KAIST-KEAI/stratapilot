@@ -1,35 +1,34 @@
 from jarvis.agent.openai_agent import OpenAIAgent
 from jarvis.enviroment.old_env import BaseEnviroment
-from jarvis.enviroment.py_env import PythonEnv
-from jarvis.enviroment.bash_env import BashEnv
+
 '''
-Made By WZM
-用处：打开各种文档，例如ppt、excel、word、pdf等
+A minimal example for base env and openai agent
+The goal of this example is to demonstrate how agent parse response to get actions, and env execute those actions.
 '''
 
-# environment = BaseEnviroment()
-environment = PythonEnv()
+environment = BaseEnviroment()
 agent = OpenAIAgent(config_path="config.json")
 
 response = '''
-Thought: To set up the working environment, we can focus on two sub-goals: turning on dark mode and organizing the app layout.
+Thought: To open a document, we can focus on one goal: open the specified document(word, pdf, pptx, txt).
 
 Actions: 
-1. <action>open_document</action> <invoke>open_document()("./作业10答案.pdf")</invoke>
-
+1. <action>open_document</action>
+Paramters:
+1. <parameter><arg>path:/home/heroding/桌面/test.txt</arg><arg>name:test.txt</arg><arg>type:txt</arg></parameter>
 '''
 
 action = agent.extract_action(response, begin_str='<action>', end_str='</action>')
-invoke = agent.extract_action(response, begin_str='<invoke>', end_str='</invoke>')
-print(invoke)
-import time
-for (i,a) in enumerate(action):
-    command = agent.action_lib[a] + "\n" + invoke[i]
-    # print(a, command)
-    print(environment.step(command).result)
-    # time.sleep(2)
+paramter = agent.extract_parameter(response, begin_str='<parameter>', end_str='</parameter>')
+print(paramter)
+# import time
+# for a in action:
+#     command = agent.action_lib[a]
+#     # print(a, command)
+#     print(environment.step(command))
+#     # time.sleep(2)
 
-# from jarvis.action_lib.execute_sql import execute_sql as ExecuteSQL
+# from jarvis.action_lib.execute_sql import ExecuteSQL
 
 # action = ExecuteSQL()
 # action(query='SELECT * FROM railway\nWHERE number="D1000";')

@@ -40,6 +40,7 @@ class BaseAgent:
                 module = importlib.import_module(class_name)
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
                 tmp_obj = getattr(module, class_name)()
                 self.action_lib.update({class_name: tmp_obj})
                 self.action_lib_description.update({class_name: tmp_obj.description})
@@ -64,28 +65,46 @@ class BaseAgent:
 =======
                 obj_code = self.get_class_source_code(module, class_name)
                 self.action_lib.update({class_name: obj_code})
+=======
+                # get origin code
+                source_code = inspect.getsource(module)
+                # get class object
+                tmp_obj = getattr(module, class_name)() 
+                # save origin code
+                self.action_lib.update({class_name: source_code})
+                # save code description
+                self.action_lib_description.update({class_name: tmp_obj.description})
+>>>>>>> aaa5bdd (add multi-parameter open_document function)
                 
+    # get class source code
+    # def get_class_source_code(self, module, class_name):
+    #     # 获取类对象
+    #     tmp_obj = getattr(module, class_name)
+    #     print(type(tmp_obj.description))
+    #     self.action_lib_description.update({class_name: tmp_obj.description})
+    #     # 获取类定义的源文件和行号
+    #     source_file = inspect.getsourcefile(tmp_obj)
+    #     source_lines, start_line = inspect.getsourcelines(tmp_obj)
 
-    def get_class_source_code(self, module, class_name):
-        # 获取类对象
-        tmp_obj = getattr(module, class_name)
-        print(type(tmp_obj.description))
-        self.action_lib_description.update({class_name: tmp_obj.description})
-        # 获取类定义的源文件和行号
-        source_file = inspect.getsourcefile(tmp_obj)
-        source_lines, start_line = inspect.getsourcelines(tmp_obj)
+    #     # 读取源文件
+    #     with open(source_file, 'r') as file:
+    #         lines = file.readlines()
 
-        # 读取源文件
-        with open(source_file, 'r') as file:
-            lines = file.readlines()
+    #     # 提取类的源代码
+    #     class_code = ''.join(lines[start_line - 1: start_line - 1 + len(source_lines)])
 
+<<<<<<< HEAD
         # 提取类的源代码
         class_code = ''.join(lines[start_line - 1: start_line - 1 + len(source_lines)])
 
         return class_code
 >>>>>>> ac58871 (new example)
+=======
+    #     return class_code
+>>>>>>> aaa5bdd (add multi-parameter open_document function)
 
 if __name__ == '__main__':
+<<<<<<< HEAD
     a = BaseAgent()
 <<<<<<< HEAD
     a.init_action_lib()
@@ -98,3 +117,27 @@ if __name__ == '__main__':
     #     print(k)
     #     print(v)
 >>>>>>> ac58871 (new example)
+=======
+    agent = BaseAgent()
+    agent.init_action_lib()
+    from jarvis.enviroment.py_env import PythonEnv
+    myEnv = PythonEnv()
+    # toolName = "execute_sql"
+    # res = myEnv.step(a.action_lib['{toolname}'.format(toolname=toolName)]+"\n"+"print({toolname}()())".format(toolname=toolName))
+    # print(res.result)
+    # print(a.action_lib_description)
+    # res = a.action_lib["execute_sql"]()
+    # print(res)
+    # print(a.action_lib)
+    # print(a.action_lib_description)
+    for k,v in agent.action_lib.items():
+        toolName = k
+        toolCode = v
+        args = None
+        # print(v())
+        if(k == "python_interpreter"):
+            args = "print('hello world')"
+        res = myEnv.step(v+"\n"+"print({toolname}()({args}))".format(toolname=toolName,args=args))
+        print(res.result)
+        myEnv.reset()
+>>>>>>> aaa5bdd (add multi-parameter open_document function)

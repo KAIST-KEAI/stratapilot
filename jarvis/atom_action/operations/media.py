@@ -6,12 +6,17 @@ from jarvis.atom_action.src import *
 def view_document(file_path) -> None:
     return evince(file_path)
 
+<<<<<<< HEAD
+=======
+def view_txt(file_path) -> None:
+    return gedit(file_path)
+
+>>>>>>> aaa5bdd (add multi-parameter open_document function)
 def play_audio(file_path) -> None:
     return rhythmbox_client(f"--play-uri=\"{file_path}\"")
 
 def play_video(file_path) -> None:
     return totem(file_path)
 
-
-path = "/home/heroding/桌面/CCF.pdf"
-view_document(path)
+def view_office_document(file_path) -> None:
+    return libreoffice(file_path)

@@ -28,5 +28,12 @@ code = Bash("code")
 
 # application
 evince = Bash("evince")
+<<<<<<< HEAD
 rhythmbox_client = Bash("rhythmbox-client")
 totem = Bash("totem")
+=======
+gedit = Bash("gedit")
+rhythmbox_client = Bash("rhythmbox-client")
+totem = Bash("totem")
+libreoffice = Bash("libreoffice")
+>>>>>>> aaa5bdd (add multi-parameter open_document function)

@@ -19,6 +19,7 @@ Pkexec_gedit = Pkexec_GUI("gedit")
 # system & setting
 apt = Bash("apt")
 Pkexec_apt = Pkexec("apt")
+pip = Bash("pip")
 gsettings = Bash("gsettings")
 xrandr = Bash("xrandr")
 

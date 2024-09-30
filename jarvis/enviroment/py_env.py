@@ -34,7 +34,8 @@ class PythonEnv(Env):
                 ["python", '-B', str(filename)],
                 encoding="utf8",
                 check=True, cwd=self.working_dir, timeout=self.timeout,
-                stdout=subprocess.PIPE
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
             )
             if results.stdout:
                 stout = results.stdout.strip().split('\n')

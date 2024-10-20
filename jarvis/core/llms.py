@@ -3,10 +3,10 @@ import openai
 import time
 import json
 
-proxy = {
-'http': 'http://localhost:2081',
-'https': 'http://localhost:2081',
-}
+# proxy = {
+# 'http': 'http://localhost:2080',
+# 'https': 'http://localhost:2080',
+# }
 
 
 class OpenAI:

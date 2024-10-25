@@ -30,10 +30,15 @@ code = Bash("code")
 # application
 evince = Bash("evince")
 <<<<<<< HEAD
+<<<<<<< HEAD
 rhythmbox_client = Bash("rhythmbox-client")
 totem = Bash("totem")
 =======
 gedit = Bash("gedit")
+=======
+libreoffice = Bash("libreoffice") # add by wzm
+soffice = Bash("/Applications/LibreOffice.app/Contents/MacOS/soffice") # libreoffice for macos
+>>>>>>> a71dd16 (add mac version for open doc)
 rhythmbox_client = Bash("rhythmbox-client")
 totem = Bash("totem")
 libreoffice = Bash("libreoffice")

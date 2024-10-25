@@ -7,13 +7,13 @@ The function is to be able to open any type of document.
 '''
 
 environment = PythonEnv()
-agent = OpenAIAgent(config_path="config.json")
+agent = OpenAIAgent(config_path="examples/config.json")
 
 response = '''
 Thought: To open a document named , we can focus on one goal: open the specified document(word, pdf, pptx, txt etc.).
 
 Actions: 
-1. <action>open_document</action>
+1. <action>open_document</action> <invoke>open_document()("/Users/hanchengcheng/Desktop/云大合作重点研发计划/国家版本典藏资源数字化服务关键技术与平台研发-重点研发计划申报书.pdf")</invoke>
 
 Check local action_lib, the required action code is in the library, according to the function description in the code, combined with the information provided by the user, You can instantiate classes for different tasks.
 

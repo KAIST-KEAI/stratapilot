@@ -4,36 +4,36 @@ import shutil
 
 class organize_document(BaseAction):
     def __init__(self):
-        self._description = "This class organizes retrieved files into a folder named agent, with the file paths listed in a txt file named agent."
+        self._description = "This class organizes the retrieved files into a folder named agent, using the paths listed in the agent.txt file."
 
-    def __call__(self, file_path, working_directory=None):
+    def __call__(self, working_directory, agent_txt_path):
         """
-        Organize retrieved files into a folder named agent, with the file paths listed in a txt file named agent.
+        Organize the retrieved files into a folder named agent.
 
         Args:
-        file_path (str): The path of the txt file containing the retrieved file paths.
-        working_directory (str, optional): The working directory path. If not provided, the current working directory will be used.
+        working_directory (str): The working directory where the retrieved files and agent.txt file are located.
+        agent_txt_path (str): The path to the agent.txt file containing the paths of the retrieved files.
 
         Returns:
         None
         """
-        # Set the working directory
-        if working_directory:
-            os.chdir(working_directory)
-        
-        # Create the folder named agent
-        os.makedirs("agent", exist_ok=True)
+        # Change the current working directory to the specified working directory
+        os.chdir(working_directory)
 
-        # Read the txt file and move the files to the agent folder
-        with open(file_path, 'r', encoding='utf-8') as file:
-            for line in file:
-                file_path = line.strip()
-                if os.path.exists(file_path):
-                    file_name = os.path.basename(file_path)
-                    shutil.move(file_path, os.path.join("agent", file_name))
-                else:
-                    print(f"File not found: {file_path}")
+        # Create the folder named agent if it doesn't exist
+        agent_folder_path = os.path.join(working_directory, 'agent')
+        if not os.path.exists(agent_folder_path):
+            os.makedirs(agent_folder_path)
 
-# Example of how to use the class:
-# org_doc = organize_document()
-# org_doc(file_path="retrieved_files.txt", working_directory="/home/heroding/桌面/Jarvis/working_dir")
+        # Read the paths from the agent.txt file
+        with open(agent_txt_path, 'r', encoding='utf-8') as file:
+            file_paths = file.read().splitlines()
+
+        # Move the retrieved files to the agent folder
+        for file_path in file_paths:
+            file_name = os.path.basename(file_path)
+            destination_path = os.path.join(agent_folder_path, file_name)
+            shutil.move(file_path, destination_path)
+
+        # Optionally, remove the agent.txt file after organizing the documents
+        # os.remove(agent_txt_path)

@@ -10,12 +10,15 @@ target: Classify files in a specified folder.
 environment = PythonEnv()
 # path of action lib
 action_lib_path = "../jarvis/action_lib"
-args_description_lib_path = action_lib_path + "/args_description_lib"
-action_description_lib_path = action_lib_path + "/action_description_lib"
+# args_description_path = action_lib_path + "/args_description"
+# action_description_path = action_lib_path + "/action_description"
+# code_path = action_lib_path + "/code"
+# vectordb_path = action_lib_path + "/vectordb"
+
 # use to look up existed skill code and extract information
-retrieve_agent = OpenAIAgent(config_path="./config.json")
+retrieve_agent = OpenAIAgent(config_path="./config.json", action_lib_dir=action_lib_path)
 # use to create new skills
-execute_agent = ExecutionModule(config_path="./config.json")
+execute_agent = ExecutionModule(config_path="./config.json", action_lib_dir=action_lib_path)
 
 # We assume that the response result comes from the task planning agent.
 response = '''
@@ -35,11 +38,11 @@ task_descriptions = retrieve_agent.extract_information(response, begin_str='<des
 # Loop all the actions
 for action, description in zip(actions, task_descriptions):
     # Create python tool class code
-    code = execute_agent.generate_action(action, description, environment.working_dir)
+    code = execute_agent.generate_action(action, description)
     print(code)
 
     # Execute python tool class code
-    state = execute_agent.execute_action(environment, code, description, environment.working_dir)
+    state = execute_agent.execute_action(code, description)
     print(state)
 
     # Check whether the code runs correctly, if not, amend the code
@@ -62,7 +65,7 @@ for action, description in zip(actions, task_descriptions):
         new_code = execute_agent.amend_action(current_code, description, state, critique)
         current_code = new_code
         # Run the current code and check for errors
-        state = environment.step(current_code)
+        state = execute_agent.execute_action(current_code, task_descrption)
         print(state)
         # Recheck
         if state.error == None:
@@ -79,5 +82,5 @@ for action, description in zip(actions, task_descriptions):
     if need_mend == True:
         print("I can't Do this Task!!")
     else: # The task is completed, save the code, args_description, action_description in lib
-        execute_agent.store_action(action, current_code, action_lib_path, args_description_lib_path, action_description_lib_path)
+        execute_agent.store_action(action, current_code)
 

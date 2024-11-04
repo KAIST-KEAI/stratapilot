@@ -3,7 +3,7 @@ import time
 import os
 from typing import Optional, Union, List
 from jarvis.core.schema import ActionReturn, ActionStatusCode, EnvState
-from jarvis.enviroment.env import Env
+from jarvis.environment.env import Env
 
 
 class BashEnv(Env):

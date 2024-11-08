@@ -1,13 +1,11 @@
 from jarvis.agent.openai_agent import OpenAIAgent
-from jarvis.environment.py_env import PythonEnv
-from jarvis.agent.jarvis_agent import ExecutionModule, JarvisAgent
+from jarvis.agent.jarvis_agent import JarvisAgent
 
 '''
 Made By DZC & WZM
 target: Classify files in a specified folder.
 '''
-# environment
-environment = PythonEnv()
+
 # path of action lib
 action_lib_path = "../jarvis/action_lib"
 # args_description_path = action_lib_path + "/args_description"
@@ -23,15 +21,13 @@ execute_agent = jarvis_agent.executor
 
 # We assume that the response result comes from the task planning agent.
 response = '''
-Thought: In order to solve this task, first search the txt text in the document file in the working directory. If the text contains the word "agent", put the path of the text into agent.txt and wrap it in a new line. The second step is put the retrieved files into the folder named agent, the path of the retrieved files is placed in the txt file named agent, Each line is the path of a file.
-
+Thought: XXX
 Actions: 
-1. <action>retrieve_document</action> <description>search the txt text in the folder call document in the working directory. If the text contains the word "agent", put the full path of the text into agent.txt and wrap it in a new line.</description>
-2. <action>organize_document</action> <description>put the retrieved files into the folder named agent, the path of the retrieved files is placed in the txt file named agent.txt, Each line is the path of a file.</description>
+1. <action>XXX</action> <description>XXX</description>
+2. <action>XXX</action> <description>XXX</description>
 Check local action_lib, the required action code is in the library, according to the function description in the code, combined with the information provided by the user, You can instantiate classes for different tasks.
 
 '''
-
 
 # Get actions and corresponding descriptions
 actions = retrieve_agent.extract_information(response, begin_str='<action>', end_str='</action>')
@@ -58,7 +54,7 @@ for action, description in zip(actions, task_descriptions):
         need_mend = True    
     # The code failed to complete its task, fix the code
     current_code = code
-    while (trial_times < 3 and need_mend == True):
+    while (trial_times < execute_agent.max_iter and need_mend == True):
         trial_times += 1
         print("current amend times: {}".format(trial_times))
         new_code = execute_agent.amend_action(current_code, description, state, critique)
@@ -84,3 +80,4 @@ for action, description in zip(actions, task_descriptions):
     else: # The task is completed, if code is save the code, args_description, action_description in lib
         if score >= 8:
             execute_agent.store_action(action, current_code)
+

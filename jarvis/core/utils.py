@@ -1,5 +1,6 @@
 import copy
-
+import openai
+import numpy as np
 
 def generate_prompt(template: str, replace_dict: dict):
     prompt = copy.deepcopy(template)

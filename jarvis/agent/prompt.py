@@ -375,9 +375,10 @@ prompt = {
         19. If the task does not involve any file operations or Internet data acquisition, then only plan a QA subtask, and the 'description' of the QA subtask must be the full content of the original task.
         20. If the task is to use the content in a local file to answer question or retrieve a certain word or content, then you only need to plan a Code subtask to read the text content in the file, and then plan a QA subtask to analyze the text content returned by the Code subtask to answer the question.
         21. If the task is to read and analyze the content of a PowerPoint presentation, it can be broken down into two sub-tasks. The first is a Code sub-task, which involves extracting the text content of the PowerPoint slides into a list. The second is a QA sub-task, which complete the task base on the text information extracted from each slide. 
-        22. If the task is to calculate sales in an excel file, it can be broken down into two sub-tasks. The first is a Code sub-task, which involves extracting the text content of the excel file. The second is a API sub-task, which uses math API tool to accomplish this task.
+        22. If the attached file is a xlsx file, the task must be broken down into two sub-tasks. The first is a Code sub-task, which involves extracting the full text content of the excel file. The second is a QA subtask, which analyzes and completes task based on the content in excel.
         23. Once the task involves obtaining knowledge such as books, articles, character information, etc., you need to plan API tasks to obtain this knowledge from the Internet.
-        24. Please add a QA subtask following the API subtask that is used for Internet information retrieval. However, it is not necessary to include a QA subtask after the API subtask that is used for format conversion.
+        24. When you determine the need to use an information retrieval API such as "/tools/bing/searchv2" during step-by-step reasoning, you need to continue reasoning and plan out a QA subtask to analyze and summarize the information returned by these APIs.
+        25. When the task involves retrieving a certain detailed content, then after decomposing the API subtask using '/tools/bing/searchv2', you also need to decompose an API subtask using '/tools/bing/load_pagev2', using for more detailed content.
         ''',
         '_USER_TASK_DECOMPOSE_PROMPT' : '''
         User's information are as follows:

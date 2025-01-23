@@ -4,7 +4,8 @@ Auto-GPT/
 Agents/
 utils/
 
-examples/*.log
+
+/examples/log/*
 working_dir/*.log
 .vs/
 .vscode/

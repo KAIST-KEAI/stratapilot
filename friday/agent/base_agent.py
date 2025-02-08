@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 import sys
 import glob
@@ -7,6 +8,9 @@ from typing import Optional
 <<<<<<< HEAD
 =======
 import inspect
+=======
+from friday.action.base_action import BaseAction
+>>>>>>> 024f37e (update)
 import re
 import json
 
@@ -58,6 +62,7 @@ class BaseAgent:
             except json.JSONDecodeError as e:
                 return f"Error parsing JSON data: {e}"
         else:
+<<<<<<< HEAD
             return "No JSON data found in the string."
 
 
@@ -181,3 +186,6 @@ if __name__ == '__main__':
         print(res.result)
         myEnv.reset()
 >>>>>>> aaa5bdd (add multi-parameter open_document function)
+=======
+            return "No JSON data found in the string."
+>>>>>>> 024f37e (update)

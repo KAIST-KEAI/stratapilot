@@ -1,8 +1,8 @@
 import json
-from jarvis.core.llms import OpenAI
-from jarvis.agent.base_agent import BaseAgent
-from jarvis.environment.old_env import BaseEnviroment
-from jarvis.core.schema import EnvState
+from friday.core.llms import OpenAI
+from friday.agent.base_agent import BaseAgent
+from friday.core.schema import EnvState
+from friday.core.action_manager import ActionManager
 
 
 a = "{action_input} the input to the action, could be any valid input for python programs or shell commands, such numbers, strings, or path to a file, etc."
@@ -136,6 +136,7 @@ class OpenAIAgent(BaseAgent):
 
 
 if __name__ == '__main__':
+<<<<<<< HEAD
     actions = {
         "turn_on_dark_mode()": "Using turn_on_dark_mode() will change your system into the dark mode.",
         "play_study_music()": "Using play_study_music()  will open Music in your Mac and play songs that are sutiable for study and work.",
@@ -146,6 +147,17 @@ if __name__ == '__main__':
     environment = BaseEnviroment()
     agent = OpenAIAgent(config_path="../../examples/config.json", environment=environment)
 
+=======
+    # actions = {
+    #     "turn_on_dark_mode()": "Using turn_on_dark_mode() will change your system into the dark mode.",
+    #     "play_study_music()": "Using play_study_music()  will open Music in your Mac and play songs that are sutiable for study and work.",
+    #     "create_meeting()": "Using create_meeting() will help user create a meeting event. When users request to create a meeting, don't ask questions such as meeting title and time, just invoke this tool by generating the action name.",
+    #     "show_upcoming_meetings()": "Using show_upcoming_meetings() will open Calendar and show the their upcoming meetings for the user.",
+    #     "organize_app_layout()": "Using organize_app_layout() will help user reorganize their Desktop layout for better working condition and focus more easily."
+    # }
+    # agent = OpenAIAgent(config_path="../../examples/config.json", environment=environment)
+    agent = OpenAIAgent(config_path="../../examples/config.json")
+>>>>>>> 024f37e (update)
     # print(agent.action_lib)
     # print(agent.action_lib_description)
     # executation_action = agent.action_lib["turn_on_dark_mode"]()
@@ -153,9 +165,10 @@ if __name__ == '__main__':
     # response = agent.format_message(query="I want to start working now. Please help set up the working environment for me.")
     # print(agent.prompt)
     # print(response['content'])
-    response = '''
-Thought: To set up the working environment, we can focus on two sub-goals: turning on dark mode and organizing the app layout.
+#     response = '''
+# Thought: To set up the working environment, we can focus on two sub-goals: turning on dark mode and organizing the app layout.
 
+<<<<<<< HEAD
 Actions: 
 1. <action>turn_on_dark_mode</action>
 2. <action>turn_on_light_mode</action>'''
@@ -166,3 +179,16 @@ Actions:
         command = agent.action_lib[a]
         print(agent.env.step(command))
         time.sleep(2)
+=======
+# Actions: 
+# 1. <action>turn_on_dark_mode</action>
+# 2. <action>turn_on_light_mode</action>'''
+#     action = agent.extract_action(response, begin_str='<action>', end_str='</action>')
+#     import time
+#     for a in action:
+#         print(a)
+#         command = agent.action_lib[a]
+#         # print(agent.env.step(command))
+#         print(environment.step(command))
+#         time.sleep(2)
+>>>>>>> 024f37e (update)

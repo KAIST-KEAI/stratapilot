@@ -21,11 +21,8 @@ class PythonEnv(Env):
 
     def step(self, _command: str, args: list[str] | str = []) -> EnvState:
         tmp_code_file = NamedTemporaryFile("w", dir=self.working_dir, suffix=".py", encoding="utf-8")
-<<<<<<< HEAD
-=======
         # Solving the issue of not being able to retrieve the current working directory of the last line of output
         _command = _command.strip() + "\n"  + "import os" + "\n" + "print(os.getcwd())"
->>>>>>> 024f37e (update)
         tmp_code_file.write(_command)
         tmp_code_file.flush()
         filename = tmp_code_file.name
@@ -40,10 +37,7 @@ class PythonEnv(Env):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
-<<<<<<< HEAD
-=======
             # If there is standard output.
->>>>>>> 024f37e (update)
             if results.stdout:
                 stout = results.stdout.strip().split('\n')
                 self.env_state.result = "\n".join(stout[:-1])

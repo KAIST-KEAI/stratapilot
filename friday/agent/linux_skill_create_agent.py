@@ -83,10 +83,10 @@ class LinuxSkillCreateAgent():
             {"role": "user", "content": self.user_prompt},
         ]
         response =self.llm.chat(self.message)
-        judge_json = '{' + '\n' + self.extract_information(response, '{', '}')[0] + '\n' + '}'       
-        print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+        judge_json = '{' + '\n' + self.extract_information(response, '{', '}')[0] + '\n' + '}'    
+        print("************************<judge_json>**************************")
         print(judge_json)
-        print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+        print("************************</judge_json>*************************")           
         judge_json = json.loads(judge_json)
         return judge_json    
 

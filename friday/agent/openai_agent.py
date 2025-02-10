@@ -41,11 +41,12 @@ class OpenAIAgent(BaseAgent):
         self.max_iter = 3
         self.system_prompt = """You are a personal assistant that aims to automate the workflow for human.\nYou are capable of understanding human intent and decompose it into several subgoals that can be addressed via language generation or acomplished using external tools.\nSome of the external tools you can use and their functionalities are as follows:
         """
-        self.action_names = self.action_lib.keys()
+        self.action_names = self.action_lib.action_names
+        self.available_action_description = self.action_lib.descriptions
         # todo: 添加工具检索模块
-        self.available_action_description = ""
-        for i, name in enumerate(self.action_names):
-            self.available_action_description += "Tool {}: <action>{}</action>\n{}\n".format(i+1, name, self.action_lib_description[name])
+        # self.available_action_description = ""
+        # for i, name in enumerate(self.action_names):
+        #     self.available_action_description += "Tool {}: <action>{}</action>\n{}\n".format(i+1, name, self.action_lib_description[name])
 
     def from_config(self, config_path=None):
         self.llm = OpenAI(config_path)
@@ -136,18 +137,6 @@ class OpenAIAgent(BaseAgent):
 
 
 if __name__ == '__main__':
-<<<<<<< HEAD
-    actions = {
-        "turn_on_dark_mode()": "Using turn_on_dark_mode() will change your system into the dark mode.",
-        "play_study_music()": "Using play_study_music()  will open Music in your Mac and play songs that are sutiable for study and work.",
-        "create_meeting()": "Using create_meeting() will help user create a meeting event. When users request to create a meeting, don't ask questions such as meeting title and time, just invoke this tool by generating the action name.",
-        "show_upcoming_meetings()": "Using show_upcoming_meetings() will open Calendar and show the their upcoming meetings for the user.",
-        "organize_app_layout()": "Using organize_app_layout() will help user reorganize their Desktop layout for better working condition and focus more easily."
-    }
-    environment = BaseEnviroment()
-    agent = OpenAIAgent(config_path="../../examples/config.json", environment=environment)
-
-=======
     # actions = {
     #     "turn_on_dark_mode()": "Using turn_on_dark_mode() will change your system into the dark mode.",
     #     "play_study_music()": "Using play_study_music()  will open Music in your Mac and play songs that are sutiable for study and work.",
@@ -157,7 +146,6 @@ if __name__ == '__main__':
     # }
     # agent = OpenAIAgent(config_path="../../examples/config.json", environment=environment)
     agent = OpenAIAgent(config_path="../../examples/config.json")
->>>>>>> 024f37e (update)
     # print(agent.action_lib)
     # print(agent.action_lib_description)
     # executation_action = agent.action_lib["turn_on_dark_mode"]()
@@ -168,18 +156,6 @@ if __name__ == '__main__':
 #     response = '''
 # Thought: To set up the working environment, we can focus on two sub-goals: turning on dark mode and organizing the app layout.
 
-<<<<<<< HEAD
-Actions: 
-1. <action>turn_on_dark_mode</action>
-2. <action>turn_on_light_mode</action>'''
-    action = agent.extract_action(response, begin_str='<action>', end_str='</action>')
-    import time
-    for a in action:
-        print(a)
-        command = agent.action_lib[a]
-        print(agent.env.step(command))
-        time.sleep(2)
-=======
 # Actions: 
 # 1. <action>turn_on_dark_mode</action>
 # 2. <action>turn_on_light_mode</action>'''
@@ -191,4 +167,3 @@ Actions:
 #         # print(agent.env.step(command))
 #         print(environment.step(command))
 #         time.sleep(2)
->>>>>>> 024f37e (update)

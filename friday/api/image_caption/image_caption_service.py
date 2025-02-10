@@ -33,5 +33,5 @@ async def image_search(item: dict = Depends(caption_parameters)):
         caption = image_caption_api.caption(url=image_url,query=item["query"])
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return caption
+    return {"caption":caption}
 

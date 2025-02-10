@@ -1,14 +1,8 @@
 import subprocess
 import os
-<<<<<<< HEAD
-from typing import Optional, Union, List
-from jarvis.core.schema import ActionReturn, ActionStatusCode, EnvState
-from jarvis.environment.env import Env
-=======
 
 from friday.core.schema import EnvState
 from friday.environment.env import Env
->>>>>>> 024f37e (update)
 
 
 class BashEnv(Env):
@@ -54,17 +48,9 @@ class BashEnv(Env):
 
 if __name__ == '__main__':
     env = BashEnv()
-<<<<<<< HEAD
-    print(env.step("ls"))
-    print(env.step("cd ../../"))
-    print(env.step("gogo"))
-    env.reset()
-    print(env.step("sleep 3"))
-=======
     print(env.name)
     # print(env.step("ls"))
     # print(env.step("cd ../../"))
     # print(env.step("gogo"))
     # env.reset()
     # print(env.step("sleep 3"))
->>>>>>> 024f37e (update)

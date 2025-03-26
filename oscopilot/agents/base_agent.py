@@ -1,20 +1,27 @@
 import re
 import json
-from oscopilot.utils.llms import OpenAI
-# from oscopilot.environments.py_env import PythonEnv
-# from oscopilot.environments.py_jupyter_env import PythonJupyterEnv
-from oscopilot.environments import Env
 from oscopilot.utils import get_os_version
 
-class BaseModule:
+
+class BaseAgent:
+    """
+    BaseAgent serves as the foundational class for all agents types within the system.
+
+    This class initializes the core attributes common across different agents, providing
+    a unified interface for further specialization. Attributes include a language learning
+    model, the execution environments, an action library, and a maximum iteration limit for
+    agents operations.
+
+    Attributes:
+        llm: Placeholder for a language learning model, initialized as None.
+        environments: The execution environments for the agents, initialized as None.
+        action_lib: A library of actions available to the agents, initialized as None.
+        max_iter: The maximum number of iterations the agents can perform, initialized as None.
+    """
     def __init__(self):
         """
-        Initializes a new instance of BaseModule with default values for its attributes.
+        Initializes a new instance of BaseAgent with default values for its attributes.
         """
-        self.llm = OpenAI()
-        # self.environment = PythonEnv()
-        # self.environment = PythonJupyterEnv()
-        self.environment = Env()
         self.system_version = get_os_version()
         
     def extract_information(self, message, begin_str='[BEGIN]', end_str='[END]'):
@@ -33,7 +40,7 @@ class BaseModule:
         _begin = message.find(begin_str)
         _end = message.find(end_str)
         while not (_begin == -1 or _end == -1):
-            result.append(message[_begin + len(begin_str):_end].lstrip("\n"))
+            result.append(message[_begin + len(begin_str):_end])
             message = message[_end + len(end_str):]
             _begin = message.find(begin_str)
             _end = message.find(end_str)

@@ -1,7 +1,7 @@
-Large Language Models
+AppleScript Environment
 ==============================
 
-.. autoclass:: oscopilot.utils.llms.OpenAI
+.. automodule:: oscopilot.environments.applescript_env
    :members:
    :undoc-members:
    :show-inheritance:

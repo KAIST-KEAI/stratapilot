@@ -2,8 +2,10 @@ from oscopilot.modules.base_module import BaseModule
 from oscopilot.tool_repository.manager.tool_manager import get_open_api_doc_path
 import re
 import json
+import subprocess
 from pathlib import Path
 from oscopilot.utils.utils import send_chat_prompts
+
 
 
 
@@ -27,7 +29,7 @@ class FridayExecutor(BaseModule):
         with open(self.open_api_doc_path) as f:
             self.open_api_doc = json.load(f) 
     
-    def generate_tool(self, task_name, task_description, pre_tasks_info, relevant_code):
+    def generate_tool(self, task_name, task_description, tool_type, pre_tasks_info, relevant_code):
         """
         Generates executable code and invocation logic for a specified tool.
 
@@ -39,6 +41,7 @@ class FridayExecutor(BaseModule):
         Args:
             task_name (str): The name of the task for which tool code is being generated.
             task_description (str): A description of the task, detailing what the tool aims to accomplish.
+            tool_type (str): The type of tool being generated, such as 'Python', 'Shell', or 'AppleScript'.
             pre_tasks_info (dict): Information about tasks that are prerequisites for the current task, including their descriptions and return values.
             relevant_code (dict): A dictionary of code snippets relevant to the current task, possibly including code from prerequisite tasks.
 
@@ -48,20 +51,33 @@ class FridayExecutor(BaseModule):
                 - invoke (str): The specific logic or command to invoke the generated tool.
         """
         relevant_code = json.dumps(relevant_code)
-
-        sys_prompt = self.prompt['_SYSTEM_SKILL_CREATE_AND_INVOKE_PROMPT']
-        user_prompt = self.prompt['_USER_SKILL_CREATE_AND_INVOKE_PROMPT'].format(
-            system_version=self.system_version,
-            task_description=task_description,
-            working_dir= self.environment.working_dir,
-            task_name=task_name,
-            pre_tasks_info=pre_tasks_info,
-            relevant_code=relevant_code
-        )
+        if tool_type == 'Python':
+            sys_prompt = self.prompt['_SYSTEM_PYTHON_SKILL_AND_INVOKE_GENERATE_PROMPT']
+            user_prompt = self.prompt['_USER_PYTHON_SKILL_AND_INVOKE_GENERATE_PROMPT'].format(
+                system_version=self.system_version,
+                task_description=task_description,
+                working_dir= self.environment.working_dir,
+                task_name=task_name,
+                pre_tasks_info=pre_tasks_info,
+                relevant_code=relevant_code
+            )
+        else:
+            sys_prompt = self.prompt['_SYSTEM_SHELL_APPLESCRIPT_GENERATE_PROMPT']
+            user_prompt = self.prompt['_USER_SHELL_APPLESCRIPT_GENERATE_PROMPT'].format(
+                system_version=self.system_version,
+                task_description=task_description,
+                working_dir= self.environment.working_dir,
+                task_name=task_name,
+                pre_tasks_info=pre_tasks_info,
+                Type=tool_type
+            )
 
         create_msg = send_chat_prompts(sys_prompt, user_prompt, self.llm)
-        code = self.extract_python_code(create_msg)
-        invoke = self.extract_information(create_msg, begin_str='<invoke>', end_str='</invoke>')[0]
+        code = self.extract_code(create_msg, tool_type)
+        if tool_type == 'Python':
+            invoke = self.extract_information(create_msg, begin_str='<invoke>', end_str='</invoke>')[0]
+        else:
+            invoke = ''
         return code, invoke
 
     def execute_tool(self, code, invoke, node_type):
@@ -87,13 +103,24 @@ class FridayExecutor(BaseModule):
             Python code. The method is designed to be extensible for other tool types as needed.
         """
         # print result info
-        if node_type == 'Code':
+        if node_type == 'Python':
             info = "\n" + '''print("<return>")''' + "\n" + "print(result)" +  "\n" + '''print("</return>")'''
             code = code + '\nresult=' + invoke + info
+        # state = EnvState(command=code)
         print("************************<code>**************************")
         print(code)
-        print("************************</code>*************************")  
-        state = self.environment.step(code)
+        print("************************</code>*************************")
+        # for output_line_dic in self.environment.step(code):
+        #     if output_line_dic['format'] == 'active_line':
+        #         continue
+        #     content = output_line_dic['content']
+        #     if 'Traceback' in content:
+        #         state.error = (state.error or '') + content
+        #     else:
+        #         state.result += content
+        # state.pwd = self.environment.working_dir
+        # state.ls = subprocess.run(['ls'], cwd=self.environment.working_dir, capture_output=True, text=True).stdout
+        state = self.environment.step(node_type, code)  # node_type
         print("************************<state>**************************")
         print(state)
         # print("error: " + state.error + "\nresult: " + state.result + "\npwd: " + state.pwd + "\nls: " + state.ls)
@@ -126,23 +153,28 @@ class FridayExecutor(BaseModule):
         user_prompt = self.prompt['_USER_TASK_JUDGE_PROMPT'].format(
             current_code=code,
             task=task_description,
-            code_output=state.result,
+            code_output=state.result[:999] if len(state.result) > 1000 else state.result,
             current_working_dir=state.pwd,
             working_dir=self.environment.working_dir,
             files_and_folders=state.ls,
-            next_action=next_action
+            next_action=next_action,
+            code_error=state.error,
         )
         response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
         judge_json = self.extract_json_from_string(response) 
         print("************************<judge_json>**************************")
         print(judge_json)
-        print("************************</judge_json>*************************")      
-        reasoning = judge_json['reasoning']
-        judge = judge_json['judge']
-        score = judge_json['score']
-        return reasoning, judge, score
+        print("************************</judge_json>*************************")
+        try:
+            reasoning = judge_json['reasoning']
+            status = judge_json['status']
+            score = judge_json['score']
+        except KeyError as e:
+            print("The judge module did not output in the specified format.")
+            raise ValueError("Missing key in judge module output: {}".format(e))
+        return reasoning, status, score
 
-    def repair_tool(self, current_code, task_description, state, critique, pre_tasks_info):
+    def repair_tool(self, current_code, task_description, tool_type, state, critique, pre_tasks_info):
         """
         Modifies or corrects the code of an tool based on feedback to better complete a task.
 
@@ -154,6 +186,7 @@ class FridayExecutor(BaseModule):
         Args:
             current_code (str): The original code of the tool that requires amendment.
             task_description (str): The description of the task the tool is intended to complete.
+            tool_type (str): The type of tool being amended, such as 'Python', 'Shell', or 'AppleScript'.
             state: The state object containing details about the tool's execution outcome.
             critique (str): Feedback or critique on the tool's execution, used to guide the amendment.
             pre_tasks_info (dict): Information about tasks that are prerequisites for the current task.
@@ -163,18 +196,32 @@ class FridayExecutor(BaseModule):
                 - new_code (str): The amended code for the tool.
                 - invoke (str): The command or logic to invoke the amended tool.
         """
-        sys_prompt = self.prompt['_SYSTEM_SKILL_AMEND_AND_INVOKE_PROMPT']
-        user_prompt = self.prompt['_USER_SKILL_AMEND_AND_INVOKE_PROMPT'].format(
-            original_code = current_code,
-            task = task_description,
-            error = state.error,
-            code_output = state.result,
-            current_working_dir = state.pwd,
-            working_dir= self.environment.working_dir,
-            files_and_folders = state.ls,
-            critique = critique,
-            pre_tasks_info = pre_tasks_info
-        )
+        if tool_type == 'Python':
+            sys_prompt = self.prompt['_SYSTEM_PYTHON_SKILL_AMEND_AND_INVOKE_PROMPT']
+            user_prompt = self.prompt['_USER_PYTHON_SKILL_AMEND_AND_INVOKE_PROMPT'].format(
+                original_code = current_code,
+                task = task_description,
+                error = state.error,
+                code_output = state.result,
+                current_working_dir = state.pwd,
+                working_dir= self.environment.working_dir,
+                files_and_folders = state.ls,
+                critique = critique,
+                pre_tasks_info = pre_tasks_info
+            )
+        elif tool_type in ['Shell', 'AppleScript']:
+            sys_prompt = self.prompt['_SYSTEM_SHELL_APPLESCRIPT_AMEND_PROMPT']
+            user_prompt = self.prompt['_USER_SHELL_APPLESCRIPT_AMEND_PROMPT'].format(
+                original_code = current_code,
+                task = task_description,
+                error = state.error,
+                code_output = state.result,
+                current_working_dir = state.pwd,
+                working_dir= self.environment.working_dir,
+                files_and_folders = state.ls,
+                critique = critique,
+                pre_tasks_info = pre_tasks_info
+            )
         amend_msg = send_chat_prompts(sys_prompt, user_prompt, self.llm)
         new_code = self.extract_python_code(amend_msg)
         invoke = self.extract_information(amend_msg, begin_str='<invoke>', end_str='</invoke>')[0]
@@ -287,6 +334,17 @@ class FridayExecutor(BaseModule):
         )
         return send_chat_prompts(sys_prompt, user_prompt, self.llm)  
 
+    def extract_code(self, response, code_type):
+        code = ""
+        code_type_str = '```'+code_type.lower()
+        if code_type_str in response:
+            code = response.split(code_type_str)[1].split('```')[0]
+        elif '```' in code:
+            code = response.split('```')[1].split('```')[0]
+        else:
+            raise NotImplementedError
+        return code.strip()
+
     def extract_python_code(self, response):
         """
         Extracts Python code snippets from a response string that includes code block markers.
@@ -369,10 +427,14 @@ class FridayExecutor(BaseModule):
         Returns:
             str: The extracted description of the tool if found; otherwise, None.
         """
-        init_pattern = r"def __init__\s*\(self[^)]*\):\s*(?:.|\n)*?self\._description\s*=\s*\"([^\"]+)\""
-        tool_match = re.search(init_pattern, class_code, re.DOTALL)
-        tool_description = tool_match.group(1).strip() if tool_match else None
-        return tool_description
+        match = re.search(r'"""\s*\n\s*(.*?)[\.\n]', class_code)
+        if match:
+            first_sentence = match.group(1)
+            # print("First sentence of the comment:", first_sentence)
+        else:
+            print("No description found.")
+            raise NotImplementedError
+        return first_sentence
     
     def save_str_to_path(self, content, path):
         """
@@ -461,7 +523,28 @@ class FridayExecutor(BaseModule):
 
     def generate_openapi_doc(self, tool_api_path):
         """
-        Format openapi document.
+        Generates a reduced OpenAPI documentation for a specific API path from the full OpenAPI documentation.
+
+        This method isolates and extracts the documentation for a specific tool API path, including its
+        schemas and operations (GET, POST), from the entire OpenAPI documentation stored in the instance.
+        It constructs a new, smaller OpenAPI document that only includes details relevant to the specified API path.
+        If the API path does not exist in the full documentation, it returns an error message.
+
+        Args:
+            tool_api_path (str): The specific API path for which the OpenAPI documentation should be generated.
+
+        Returns:
+            dict: A dictionary representing the OpenAPI documentation for the specific API path. If the path is not
+                found, returns a dictionary with an error message.
+        
+        The method performs several checks:
+        - Verifies the existence of the tool API path in the full OpenAPI documentation.
+        - Extracts relevant parts of the OpenAPI schema related to the path.
+        - Includes any referenced schemas necessary for understanding the API's structure and data types.
+
+        It handles both JSON and multipart/form-data content types in API request bodies, searching for schema references
+        to include in the returned documentation. This enables the resulting API document to be self-contained with respect
+        to the schemas needed to understand the API's usage.
         """
         # init current api's doc
         curr_api_doc = {}

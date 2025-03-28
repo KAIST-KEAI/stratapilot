@@ -57,18 +57,15 @@ class FridayAgent(BaseAgent):
         print("The task list obtained after planning is: {}".format(sub_tasks_list))
 
         while self.planner.sub_task_list:
-            try:
-                sub_task = self.planner.sub_task_list.pop(0)
-                execution_state = self.executing(sub_task, task)
-                isTaskCompleted, isReplan = self.self_refining(sub_task, execution_state)
-                if isReplan: continue
-                if isTaskCompleted:
-                    print("The execution of the current sub task has been successfully completed.")
-                else:
-                    print("{} not completed in repair round {}".format(sub_task, self.config.max_repair_iterations))
-                    break
-            except Exception as e:
-                print("Current task execution failed. Error: {}".format(str(e)))
+            sub_task = self.planner.sub_task_list.pop(0)
+            execution_state = self.executing(sub_task, task)
+            isTaskCompleted, isReplan = self.self_refining(sub_task, execution_state)
+            if isReplan: continue
+            if isTaskCompleted:
+                print("The execution of the current sub task has been successfully completed.")
+            else:
+                print("{} not completed in repair round {}".format(sub_task, self.config.max_repair_iterations))
+                # sys.exit()
                 break
 
     def self_refining(self, tool_name, execution_state: ExecutionState):

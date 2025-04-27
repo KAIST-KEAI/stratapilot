@@ -2,76 +2,57 @@ from oscopilot.tool_repository.manager.action_node import ActionNode
 from collections import defaultdict, deque
 from oscopilot.modules.base_module import BaseModule
 from oscopilot.tool_repository.manager.tool_manager import get_open_api_description_pair
-from oscopilot.utils.utils import send_chat_prompts, api_exception_mechanism
+from oscopilot.utils.utils import send_chat_prompts
 import json
 import sys
 import logging
 
 
-class FridayPlanner(BaseModule):
+class BasicPlanner(BaseModule):
     """
     A planning module responsible for decomposing complex tasks into manageable subtasks, replanning tasks based on new insights or failures, and managing the execution order of tasks. 
 
-    The `FridayPlanner` uses a combination of tool descriptions, environmental state, and language learning models to dynamically create and adjust plans for task execution. It maintains a tool graph to manage task dependencies and execution order, ensuring that tasks are executed in a sequence that respects their interdependencies.
+    The `BasicPlanner` uses a combination of tool descriptions, environmental state, and language learning models to dynamically create and adjust plans for task execution. It maintains a tool list to manage task dependencies and execution order, ensuring that tasks are executed in a sequence that respects their interdependencies.
     """
     def __init__(self, prompt):
         super().__init__()
-        self.tool_num = 0
-        self.tool_node = {}
+        self.subtask_num = 0
         self.prompt = prompt
-        self.tool_graph = defaultdict(list)
+        self.global_messages = []
         self.sub_task_list = []
 
     def reset_plan(self):
         """
-        Resets the tool graph and subtask list to their initial states.
+        Resets global messages and subtask list to their initial states.
         """
-        self.tool_num = 0
-        self.tool_node = {}
-        self.tool_graph = defaultdict(list)
+        self.subtask_num = 0
+        self.global_messages = []
         self.sub_task_list = []
 
-    @api_exception_mechanism(max_retries=3)
-    def decompose_task(self, task, tool_description_pair):
+    def decompose_task(self, task):
         """
-        Decomposes a complex task into manageable subtasks and updates the tool graph.
+        Decomposes a complex task into manageable subtasks.
 
-        This method takes a high-level task and an tool-description pair, and utilizes
-        the environments's current state to format and send a decomposition request to the
-        language learning model. It then parses the response to construct and update the
-        tool graph with the decomposed subtasks, followed by a topological sort to
-        determine the execution order.
+        This method takes a high-level task and utilizes the environments's current state
+        to format and send a decomposition request to the language learning model. It then 
+        parses the response to construct and update the tool list with the decomposed subtasks.
 
         Args:
             task (str): The complex task to be decomposed.
-            tool_description_pair (dict): A dictionary mapping tool names to their descriptions.
 
-        Side Effects:
-            Updates the tool graph with the decomposed subtasks and reorders tools based on
-            dependencies through topological sorting.
         """
-        files_and_folders = self.environment.list_working_dir()
-        tool_description_pair = json.dumps(tool_description_pair)
-        api_list = get_open_api_description_pair()
         sys_prompt = self.prompt['_SYSTEM_TASK_DECOMPOSE_PROMPT']
         user_prompt = self.prompt['_USER_TASK_DECOMPOSE_PROMPT'].format(
             system_version=self.system_version,
             task=task,
-            tool_list = tool_description_pair,
-            api_list = api_list,
-            working_dir = self.environment.working_dir,
-            files_and_folders = files_and_folders
+            working_dir=self.environment.working_dir
         )
         response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
-        decompose_json = self.extract_json_from_string(response)
-        # Building tool graph and topological ordering of tools
-        if decompose_json != 'No JSON data found in the string.':
-            self.create_tool_graph(decompose_json)
-            self.topological_sort()
-        else:
-            print(response)
-            print('No JSON data found in the string.')
-            sys.exit()
+        print(response)
+        task_list = self.extract_list_from_string(response)
+        self.sub_task_list = task_list
+        self.subtask_num = len(task_list)
+
 
     def replan_task(self, reasoning, current_task, relevant_tool_description_pair):
         """
@@ -188,8 +169,9 @@ class FridayPlanner(BaseModule):
             Modifies the internal state by updating `tool_num`, `tool_node`, and `tool_graph`
             to reflect the newly created tool graph.
         """
-        for task_name, task_info in decompose_json.items():
+        for _, task_info in decompose_json.items():
             self.tool_num += 1
+            task_name = task_info['name']
             task_description = task_info['description']
             task_type = task_info['type']
             task_dependencies = task_info['dependencies']
@@ -215,8 +197,9 @@ class FridayPlanner(BaseModule):
             Updates the tool graph and nodes to include the new tool and its dependencies.
             Modifies the dependencies of the current task to include the new tool.
         """
-        for task_name, task_info in new_task_json.items():
+        for _, task_info in new_task_json.items():
             self.tool_num += 1
+            task_name = task_info['name']
             task_description = task_info['description']
             task_type = task_info['type']
             task_dependencies = task_info['dependencies']
@@ -226,59 +209,6 @@ class FridayPlanner(BaseModule):
                 self.tool_node[pre_tool].next_action[task_name] = task_description           
         last_new_task = list(new_task_json.keys())[-1]
         self.tool_graph[current_task].append(last_new_task)
-
-    def topological_sort(self):
-        """
-        Generates a topological sort of the tool graph to determine the execution order.
-
-        This method applies a topological sorting algorithm to the current tool graph, 
-        considering the status of each tool. It aims to identify an order in which tools
-        can be executed based on their dependencies, ensuring that all prerequisites are met
-        before an tool is executed. The sorting algorithm accounts for tools that have not
-        yet been executed to avoid cycles and ensure a valid execution order.
-
-        Side Effects:
-            Populates `sub_task_list` with the sorted order of tools to be executed if a 
-            topological sort is possible. Otherwise, it indicates a cycle detection.
-        """
-        self.sub_task_list = []
-        graph = defaultdict(list)
-        for node, dependencies in self.tool_graph.items():
-            # If the current node has not been executed, put it in the dependency graph.
-            if not self.tool_node[node].status:
-                graph.setdefault(node, [])
-                for dependent in dependencies:
-                    # If the dependencies of the current node have not been executed, put them in the dependency graph.
-                    if not self.tool_node[dependent].status:
-                        graph[dependent].append(node)
-
-        in_degree = {node: 0 for node in graph}      
-        # Count in-degree for each node
-        for node in graph:
-            for dependent in graph[node]:
-                in_degree[dependent] += 1
-
-        # Initialize queue with nodes having in-degree 0
-        queue = deque([node for node in in_degree if in_degree[node] == 0])
-
-        # List to store the order of execution
-
-        while queue:
-            # Get one node with in-degree 0
-            current = queue.popleft()
-            self.sub_task_list.append(current)
-
-            # Decrease in-degree for all nodes dependent on current
-            for dependent in graph[current]:
-                in_degree[dependent] -= 1
-                if in_degree[dependent] == 0:
-                    queue.append(dependent)
-
-        # Check if topological sort is possible (i.e., no cycle)
-        if len(self.sub_task_list) == len(graph):
-            print("topological sort is possible")
-        else:
-            return "Cycle detected in the graph, topological sort not possible."
         
     def get_pre_tasks_info(self, current_task):
         """

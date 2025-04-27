@@ -88,7 +88,3 @@ For comprehensive guidelines on deploying API services, please refer to the [Str
 ## 🛡 Disclaimer
 
 StrataPilot is provided "as is" without warranty of any kind. Users assume full responsibility for any risks associated with its use, including **potential data loss** or **changes to system settings**. The developers of StrataPilot are not liable for any damages or losses resulting from its use. Users must ensure their actions comply with applicable laws and regulations.
-
-## 📬 Contact
-
-If you have any inquiries, suggestions, or wish to contact us for any reason, we warmly invite you to email us at wuzhiyong@pjlab.org.cn.

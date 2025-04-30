@@ -1,7 +1,7 @@
 import re
 import json
 import os
-from oscopilot.utils.llms import OpenAI,LLAMA
+from oscopilot.utils.llms import OpenAI, OLLAMA
 # from oscopilot.environments.py_env import PythonEnv
 # from oscopilot.environments.py_jupyter_env import PythonJupyterEnv
 from oscopilot.environments import Env
@@ -18,8 +18,8 @@ class BaseModule:
         """
         if MODEL_TYPE == "OpenAI":
             self.llm = OpenAI()
-        elif MODEL_TYPE == "LLAMA":
-            self.llm = LLAMA()
+        elif MODEL_TYPE == "OLLAMA":
+            self.llm = OLLAMA()
         # self.environment = PythonEnv()
         # self.environment = PythonJupyterEnv()
         self.environment = Env()
@@ -63,7 +63,7 @@ class BaseModule:
             str: An error message indicating a parsing error or that no JSON data was found.
         """
         # Improved regular expression to find JSON data within a string
-        json_regex = r'```json\s*\n\{[\s\S]*?\n\}\s*```'
+        json_regex = r'```json\n\s*\{\n\s*[\s\S\n]*\}\n\s*```'
         
         # Search for JSON data in the text
         matches = re.findall(json_regex, text)

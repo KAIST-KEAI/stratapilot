@@ -1,65 +1,61 @@
 import os
+from typing import Optional
 
 class ConfigManager:
     """
-    A singleton class responsible for managing configuration settings across the application.
+    Singleton class designed to manage application-wide configuration settings.
+    Manages HTTP/HTTPS proxy configurations and environment variable interactions.
 
-    This class implements the singleton design pattern to ensure that only one instance of the
-    ConfigManager exists at any time. It provides methods to set, apply, and clear proxy settings
-    for HTTP and HTTPS traffic.
+    Maintains a single instance throughout the application lifecycle.
+    Handles proxy setup, teardown, and environment variable management.
 
     Attributes:
-        _instance (ConfigManager): A private class-level attribute that holds the singleton instance.
-        http_proxy (str): The HTTP proxy URL.
-        https_proxy (str): The HTTPS proxy URL.
+        _instance: Private static reference to the singleton instance.
+        http_proxy: HTTP proxy URL configuration.
+        https_proxy: HTTPS proxy URL configuration.
     """
-    _instance = None
+    _instance: Optional['ConfigManager'] = None
 
-    def __new__(cls):
+    def __new__(cls) -> 'ConfigManager':
         """
-        Overrides the default instantiation process to ensure only one instance of ConfigManager is created.
-
+        Creates and returns the singleton instance, initializing default proxy settings.
+        
         Returns:
-            ConfigManager: The singleton instance of the ConfigManager.
+            The singleton instance of ConfigManager.
         """
         if cls._instance is None:
-            cls._instance = super(ConfigManager, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
+            # Default proxy configuration - override with set_proxies()
             cls._instance.http_proxy = "http://127.0.0.1:10809"
             cls._instance.https_proxy = "http://127.0.0.1:10809"
-            # cls._instance.http_proxy = None
-            # cls._instance.https_proxy = None
         return cls._instance
 
-    def set_proxies(self, http, https):
+    def set_proxies(self, http_proxy: Optional[str], https_proxy: Optional[str]) -> None:
         """
-        Sets the HTTP and HTTPS proxy URLs.
-
+        Configures HTTP and HTTPS proxy settings.
+        
         Args:
-            http (str): The HTTP proxy URL.
-            https (str): The HTTPS proxy URL.
+            http_proxy: HTTP proxy URL (e.g., "http://proxy.example.com:8080").
+            https_proxy: HTTPS proxy URL (e.g., "http://proxy.example.com:8080").
         """
-        self.http_proxy = http
-        self.https_proxy = https
+        self.http_proxy = http_proxy
+        self.https_proxy = https_proxy
 
-    def apply_proxies(self):
+    def apply_proxies(self) -> None:
         """
-        Applies the configured proxy settings by setting them in the environments variables.
-
-        The method sets the 'http_proxy' and 'https_proxy' environments variables based on the
-        configured proxy URLs. If no proxies are configured, the environments variables are not modified.
+        Applies configured proxy settings to environment variables.
+        Updates 'http_proxy' and 'https_proxy' environment variables based on current configuration.
+        Does not modify environment variables if proxy is set to None.
         """
-        if self.http_proxy:
+        if self.http_proxy is not None:
             os.environ["http_proxy"] = self.http_proxy
-        if self.https_proxy:
+        if self.https_proxy is not None:
             os.environ["https_proxy"] = self.https_proxy
 
-    def clear_proxies(self):
+    def clear_proxies(self) -> None:
         """
-        Clears the proxy settings from the environments variables.
-
-        This method removes the 'http_proxy' and 'https_proxy' entries from the environments variables,
-        effectively clearing any proxy settings that were previously applied.
+        Removes proxy configurations from environment variables.
+        Safely removes 'http_proxy' and 'https_proxy' from environment variables if they exist.
         """
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)
-

@@ -5,88 +5,94 @@ from oscopilot import FridayExecutor, FridayPlanner, FridayRetriever, ToolManage
 from oscopilot.utils import setup_config, GAIALoader, GAIA_postprocess
 
 
-args = setup_config()
-args.dataset_type = 'validation'
-model = 'gpt4-turbo'
-
-write_file_path = 'gaia_{}_{}_level{}_results.jsonl'.format(model, args.dataset_type, args.level)
-def get_numbers(path):
+def evaluate_results(path):
+    """Load previous results and calculate correct and incomplete answer counts."""
     correct = 0
     incomplete = 0
-    with open(path, 'r', encoding='utf-8') as file:
-        data = [json.loads(line) for line in file]
-        print(data)
-        for d in data:
-            if d["model_answer"] == d["groundtruth"]:
-                correct += 1
-            if d["model_answer"] == "" or d["model_answer"] == "incomplete":
-                incomplete += 1
-        if len(data) > 0:
-            return correct, incomplete, data[-1]["index"]
-        return correct, incomplete, -1 # -1 denotes no previous running
+    last_index = -1
+    try:
+        with open(path, 'r', encoding='utf-8') as file:
+            results = [json.loads(line) for line in file]
+            for item in results:
+                if item["model_answer"] == item["groundtruth"]:
+                    correct += 1
+                if item["model_answer"] in ("", "incomplete"):
+                    incomplete += 1
+            if results:
+                last_index = results[-1]["index"]
+    except FileNotFoundError:
+        pass  # File will be created later if it does not exist
+    return correct, incomplete, last_index
 
-agent = FridayAgent(FridayPlanner, FridayRetriever, FridayExecutor, ToolManager, config=args)
 
-gaia = GAIALoader(args.level, args.dataset_cache)
+def process_task(agent, task, task_index):
+    """Run the agent on a single task and return result dict."""
+    query = GAIALoader.task2query(task)
+    try:
+        agent.run(query)
+        if agent.inner_monologue.result:
+            result = GAIA_postprocess(task['Question'], agent.inner_monologue.result)
+        else:
+            result = "incomplete"
+    except requests.exceptions.ConnectionError as ce:
+        print(f"[Connection Error] {ce}")
+        exit(1)
+    except Exception as e:
+        print(f"[Exception] {e}")
+        result = "incomplete"
 
-# args.gaia_task_id = "e1fc63a2-da7a-432f-be78-7c4a95598703"
-if args.gaia_task_id:
-    task = gaia.get_data_by_task_id(args.gaia_task_id, args.dataset_type)
-    query = gaia.task2query(task)
-    # agent.run(query)
-    # if agent.inner_monologue.result != '':
-    if True:
-        # print(agent.inner_monologue.result)
-        result = """17000
-        """
-        # result = GAIA_postprocess(task['Question'], agent.inner_monologue.result)
-        result = GAIA_postprocess(task['Question'], result)
-        print('The answer of GAIA Task {0} : {1}'.format(args.gaia_task_id, result))
-else:
-    task_lst = gaia.dataset[args.dataset_type]
-    correct, incomplete, last_run_index = get_numbers(write_file_path)
-    print(correct, incomplete, last_run_index)
-    with open(write_file_path, 'a', encoding='utf-8') as file:
-        count = 0
+    return {
+        "index": task_index,
+        "task_id": task["task_id"],
+        "model_answer": result,
+        "groundtruth": task["Final answer"],
+        "reasoning_trace": ""
+    }
 
-        for task in task_lst:
-            if count <= last_run_index:
-                print("\t\t\t skip current run:", count)
-                count += 1
+
+def main():
+    args = setup_config()
+    args.dataset_type = 'validation'
+    model = 'gpt4-turbo'
+    result_path = f'gaia_{model}_{args.dataset_type}_level{args.level}_results.jsonl'
+
+    agent = FridayAgent(FridayPlanner, FridayRetriever, FridayExecutor, ToolManager, config=args)
+    gaia = GAIALoader(args.level, args.dataset_cache)
+
+    # Handle single-task mode
+    if args.gaia_task_id:
+        task = gaia.get_data_by_task_id(args.gaia_task_id, args.dataset_type)
+        query = gaia.task2query(task)
+        mock_result = "17000"  # hardcoded result (for debug/demo purposes)
+        final_result = GAIA_postprocess(task['Question'], mock_result)
+        print(f"The answer of GAIA Task {args.gaia_task_id}: {final_result}")
+        return
+
+    # Handle batch mode
+    task_list = gaia.dataset[args.dataset_type]
+    correct, incomplete, last_index = evaluate_results(result_path)
+
+    with open(result_path, 'a', encoding='utf-8') as file:
+        for idx, task in enumerate(task_list):
+            if idx <= last_index:
+                print(f"[Skip] Task {idx} already processed.")
                 continue
-            query = gaia.task2query(task)
-            result = ''
-            # agent.run(query)
-            try:
-                agent.run(query)
-                print("$$$$$$" * 30)
-                if agent.inner_monologue.result != '':
-                    result = GAIA_postprocess(task['Question'], agent.inner_monologue.result)
-            except requests.exceptions.ConnectionError as ConnectionError:
-                print(f"Connection error.: {ConnectionError}")
-                exit()
-            except Exception as e:
-                print("$$$$$$" * 30)
-                # Code to handle any other type of exception
-                print(f"An error occurred: {e}")
-                print("$$$$$$" * 30)
-                result = "incomplete"
-                incomplete += 1
-            output_dict = {
-                "index": count,
-                "task_id": task['task_id'],
-                "model_answer": result,
-                "groundtruth": task["Final answer"],
-                "reasoning_trace": ""
-            }
-            if result == task["Final answer"]:
+
+            output = process_task(agent, task, idx)
+
+            if output["model_answer"] == output["groundtruth"]:
                 correct += 1
-            json_str = json.dumps(output_dict)
-            file.write(json_str + '\n')
+            if output["model_answer"] == "incomplete":
+                incomplete += 1
+
+            file.write(json.dumps(output) + '\n')
             file.flush()
-            count += 1
-            # if count > 2:
-            #     break
-        print("accuracy:", correct / count)
-        print("incomplete:", incomplete / count)
-        print("correct incomplete total,", correct, incomplete, count)
+
+        total = idx + 1
+        print(f"Accuracy: {correct / total:.2%}")
+        print(f"Incomplete: {incomplete / total:.2%}")
+        print(f"Summary: correct={correct}, incomplete={incomplete}, total={total}")
+
+
+if __name__ == '__main__':
+    main()

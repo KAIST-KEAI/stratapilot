@@ -1,90 +1,90 @@
-# StrataPilot: Towards Generalist Computer Agents with Self-Improvement
+<p align="center">
+  <img src='pic/logo.png' width="100%">
+</p>
 
 <div align="center">
 
-<p align="center">
-  <img src='pic/demo.png' width="100%">
-</p>
+<h3><b>Next-gen copilot agent for you OS, powered by MCP</b></h3>
+
+[![Homepage](https://img.shields.io/badge/Homepage-blue?style=flat)]()
+[![Documentation](https://img.shields.io/badge/Documentation-blue?style=flat)](https://strata.readthedocs.io/en/latest)
+
+[![MIT](https://img.shields.io/badge/License-MIT-silver?style=flat-square)](LICENSE)
+[![Twitter Follow](https://img.shields.io/badge/Follow-%40keaistrata-silver?style=flat-square&logo=x)](https://x.com/keaistrata)
+[![GitHub](https://img.shields.io/github/stars/KAIST-KEAI/stratapilot?style=flat-square&logo=github&label=Stars&color=gold)](https://github.com/KAIST-KEAI/stratapilot)
 
 </div>
 
-## 📖 Overview
+---
 
-- **StrataPilot** is a pioneering conceptual framework for building generalist computer agents on Linux and MacOS, which provides a unified interface for app interactions in the heterogeneous OS ecosystem.
-  
-<p align="center">
-  <img src='pic/framework.png' width="75%">
-</p>
+**Stratapilot** is a system-level, general-purpose copilot agent that automates and executes user tasks across applications, files, and interfaces. Designed for OS-native deployment, Stratapilot enables context-aware, multi-modal task execution through natural language input.
 
-- Leveraging StrataPilot, we built **FRIDAY**, a self-improving AI assistant capable of solving general computer tasks.
+At the core of Stratapilot is the **Model Context Protocol (MCP)** — an extensible, application-agnostic protocol that allows Stratapilot to interface with third-party software (both legacy and modern) in a structured, deterministic way. MCP defines a standard for model-to-model and model-to-application communication, making Stratapilot interoperable across tools, services, and agents without requiring custom plugins.
 
-<p align="center">
-  <img src='pic/FRIDAY.png' width="75%">
-</p>
+![arch](pic/arch.png)
 
-## ⚡️ Quickstart
+---
+### ⚡️ Quickstart
 
-1. **Clone the GitHub Repository:** 
-
-   ```
-   git clone https://github.com/StrataPilot/StrataPilot.git
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/KAIST-KEAI/stratapilot.git
    ```
 
-2. **Set Up Python Environment:** Ensure you have a version 3.10 or higher Python environment. You can create and
-   activate this environment using the following commands, replacing `stratapilot_env` with your preferred environment
-   name:
-
-   ```
+2. **Set up Python environment (3.10+):**
+   ```bash
    conda create -n stratapilot_env python=3.10 -y
    conda activate stratapilot_env
    ```
 
-3. **Install Dependencies:** Move into the `StrataPilot` directory and install the necessary dependencies by running:
-
-   ```
-   cd StrataPilot
+3. **Install dependencies:**
+   ```bash
+   cd stratapilot
    pip install -e .
    ```
 
-4. **Set OpenAI API Key:** Configure your OpenAI API key in [.env](.env) and select the model you wish to use.
+4. **Configure your backend LLM API key:**
+   Set your LLM provider's API key (e.g., OpenAI) in the `.env` file and select your preferred model.
 
-5. **Running the Script:** Run the quick_start.py script, simply execute the following command in your terminal:
-   ```
+5. **Run the demo:**
+   ```bash
    python quick_start.py
    ```
 
-\* FRIDAY currently only supports single-round conversation.
+6. **Set up GUI mode (optional):**
 
-## 🛠️ FRIDAY-Gizmos
-We maintain an open-source library of toolkits for FRIDAY, which includes tools that can be directly utilized within FRIDAY.
-For a detailed list of tools, please see [FRIDAY-Gizmos](https://github.com/StrataPilot/FRIDAY-Gizmos). The usage methods are as follows:
+   Specify the default agent prompt in a configuration file named `prompt.conf` and place it in the root directory under the cloned project. You can find an example prompt file in `prompt.py`. After this is done, enable GUI mode and start the program with
+   ```bash
+   python quick_start.py --gui
+   ```
 
-1. Find the tool you want to use in [FRIDAY-Gizmos](https://github.com/StrataPilot/FRIDAY-Gizmos) and download its tool code.
-2. Add the tool to FRIDAY's toolkit:
-```shell
-python friday/tool_repository/manager/tool_manager.py --add --tool_name [tool_name] --tool_path [tool_path]
-```
-3. If you wish to remove a tool, you can run:
-```shell
-python friday/tool_repository/manager/tool_manager.py --delete --tool_name [tool_name]
-```
+   The prompt in the configuration file is used to fine-tune the agent's behavior upon startup, and will not be visible in the chat history.
+   You can then chat with the agent like with any LLM chat bot services.
 
-## 💻 User Interface (UI)
+![gui](pic/gui.png)
 
-**Enhance Your Experience with Our Intuitive Frontend!** This interface is crafted for effortless control of your agents. For more details, visit [FRIDAY Frontend](https://github.com/StrataPilot/FRIDAY-front).
+---
+### 🛠️ Advanced Usage
 
-## ✨ Deploy API Services
+Stratapilot provides a developer SDK for building:
 
-For comprehensive guidelines on deploying API services, please refer to the [StrataPilot documentation](). 
+- **Custom MCP Workflows**: Compose complex, multi-step tasks that span filesystems, APIs, user interfaces, and third-party apps. Each workflow is defined declaratively and executed deterministically by the agent engine.
+- **Adapters for Legacy Software**: Wrap older desktop or command-line applications with an MCP-compatible interface, enabling structured communication with modern agents without modifying the original software.
+- **Headless Agents and Background Tasks**: Run silent or daemon-mode agents that respond to triggers (e.g., cron jobs, file changes, system events) instead of user queries.
+- **Plugin-Free Automation**: Stratapilot doesn’t rely on per-app plugins or brittle scripting. With MCP bindings, you can interface with existing applications through their CLI, APIs, sockets, or filesystem I/O.
 
-## 👨‍💻‍ Contributors
+#### App Integration
 
-<a href="https://github.com/StrataPilot/StrataPilot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=StrataPilot/StrataPilot" />
-</a>
+Stratapilot supports a variety of integration methods out-of-the-box:
+- **File-level automation** (read/write/transform data files)
+- **Command-line tool orchestration** (wrap tools like `ffmpeg`, `git`, `curl`, etc.)
+- **API interactions** (REST/GraphQL endpoints through typed descriptors)
+- **Database queries** (e.g., SQLite, Postgres via connector wrappers)
+- **System and window control** (e.g., launching apps, recording input/output state)
 
-<!-- Made with [contrib.rocks](https://contrib.rocks). -->
+See sample code under `examples` for SDK usage demos and integration templates. For more information about tool development using the SDK, refer to Stratapilot's [documentation](https://strata.readthedocs.io/en/latest).
 
-## 🛡 Disclaimer
+---
+### 🤗 Contributing
 
-StrataPilot is provided "as is" without warranty of any kind. Users assume full responsibility for any risks associated with its use, including **potential data loss** or **changes to system settings**. The developers of StrataPilot are not liable for any damages or losses resulting from its use. Users must ensure their actions comply with applicable laws and regulations.
+Stratapilot welcomes contribution in any form! If you are interested in getting involved, refer to our [contribution guidelines](CONTRIBUTING.md).

@@ -1,58 +1,69 @@
 from oscopilot.modules.base_module import BaseModule
 from oscopilot.utils.utils import send_chat_prompts
+import logging
 
 
 class SelfLearner(BaseModule):
     """
-    This class represents a self-learning module that designs educational courses based on given parameters.
-    It inherits from BaseModule, utilizing its initialization and utility methods.
-    
+    A self-learning module that dynamically generates educational courses based on provided software information
+    and file content. Inherits from BaseModule and uses LLM-based interaction to produce structured outputs.
+
     Attributes:
-        prompt (dict): A dictionary containing system and user prompts for generating course designs.
-        tool_manager (object): An instance of a tool manager to handle external tool interactions.
-        course (dict): A dictionary to store course details that are generated based on user and system inputs.
+        prompt (dict): Contains system and user prompt templates.
+        tool_manager (object): Interface for interacting with external tools.
+        course (dict): Stores the generated course details.
     """
     def __init__(self, prompt, tool_manager):
         """
-        Initializes the SelfLearner class with the necessary prompts and tool manager.
-        
+        Initialize SelfLearner with prompt templates and a tool manager.
+
         Args:
-            prompt (dict): Contains the necessary prompts for generating the course design.
-            tool_manager (object): Manages interactions with external tools needed for course design.
+            prompt (dict): Dictionary containing system/user prompt templates.
+            tool_manager (object): Tool manager for external integration.
         """
         super().__init__()
         self.prompt = prompt
         self.tool_manager = tool_manager
         self.course = {}
-        
+
     def design_course(self, software_name, package_name, demo_file_path, file_content=None, prior_course=None):
         """
-        Designs a course based on specified software and content parameters and stores it in the course attribute.
-        
+        Generate a course based on input parameters such as software and package details.
+
         Args:
-            software_name (str): The name of the software around which the course is centered.
-            package_name (str): The name of the software package relevant to the course.
-            demo_file_path (str): Path to the demo file that will be used in the course.
-            file_content (str): The content of the file that will be demonstrated or used in the course.
-            prior_course (str): The course that has been completed.
-        
+            software_name (str): Target software for course content.
+            package_name (str): Relevant package/module name.
+            demo_file_path (str): Path to demo file used in the course.
+            file_content (str, optional): Content of the demo file.
+            prior_course (str, optional): Previously completed course to build upon.
+
         Returns:
-            dict: A dictionary containing the designed course details.
-        
-        Uses system and user prompts to create a conversation with a language model or similar system, to generate
-        a course based around the provided parameters. The response is then parsed into JSON format and saved.
+            dict: A structured dictionary representing the designed course.
+
+        Raises:
+            ValueError: If response cannot be parsed into valid JSON.
         """
-        sys_prompt = self.prompt['_SYSTEM_COURSE_DESIGN_PROMPT']
-        user_prompt = self.prompt['_USER_COURSE_DESIGN_PROMPT'].format(
-            system_version = self.system_version,
-            software_name = software_name,
-            package_name = package_name,
-            file_content = file_content,
-            demo_file_path = demo_file_path,
-            prior_course = prior_course
-        )
-        response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
-        # logging.info(f"The overall response is: {response}")
-        course = self.extract_json_from_string(response)
-        self.course = course
-        return self.course
+        try:
+            sys_prompt = self.prompt['_SYSTEM_COURSE_DESIGN_PROMPT']
+            user_prompt = self.prompt['_USER_COURSE_DESIGN_PROMPT'].format(
+                system_version=self.system_version,
+                software_name=software_name,
+                package_name=package_name,
+                file_content=file_content,
+                demo_file_path=demo_file_path,
+                prior_course=prior_course
+            )
+
+            response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
+            # logging.info(f"Received response: {response}")
+
+            course = self.extract_json_from_string(response)
+            if not isinstance(course, dict):
+                raise ValueError("Failed to extract valid JSON course structure.")
+            
+            self.course = course
+            return self.course
+
+        except Exception as e:
+            logging.error(f"Error while designing course: {e}")
+            raise

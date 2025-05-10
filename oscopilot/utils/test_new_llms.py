@@ -1,12 +1,9 @@
-# This code is based on Open Interpreter. Original source: https://github.com/OpenInterpreter/open-interpreter
-
-
 import base64
 import io
 import os
 import json
 import time
-
+from typing import Dict, List, Any, Optional, Generator, Union
 from PIL import Image
 
 from rich import print as rich_print
@@ -14,59 +11,67 @@ from rich.markdown import Markdown
 from rich.rule import Rule
 
 from dotenv import load_dotenv
-
 import litellm
 import tokentrim as tt
+
+# Configure environment and logging
+load_dotenv(dotenv_path='.env', override=True)
 litellm.suppress_debug_info = True
 
-
-load_dotenv(dotenv_path='.env', override=True)
+# Configuration parameters
 MODEL_NAME = os.getenv('MODEL_NAME')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENAI_ORGANIZATION = os.getenv('OPENAI_ORGANIZATION')
 BASE_URL = os.getenv('OPENAI_BASE_URL')
 
-
-function_schema = {
+# Function schema for code execution
+FUNCTION_SCHEMA = {
     "name": "execute",
-    "description": "Executes code on the user's machine **in the users local environment** and returns the output",
+    "description": "Executes code on the user's machine in the local environment and returns the output",
     "parameters": {
         "type": "object",
         "properties": {
             "language": {
                 "type": "string",
-                "description": "The programming language (required parameter to the `execute` function)",
-                "enum": [
-                    # This will be filled dynamically with the languages OI has access to.
-                ],
+                "description": "Programming language (required parameter for the `execute` function)",
+                "enum": []  # Dynamically filled with supported languages
             },
-            "code": {"type": "string", "description": "The code to execute (required)"},
+            "code": {"type": "string", "description": "Code to execute (required)"}
         },
-        "required": ["language", "code"],
-    },
+        "required": ["language", "code"]
+    }
 }
 
-
-def parse_partial_json(s):
-    # Attempt to parse the string as-is.
+def parse_partial_json(s: str) -> Optional[Dict[str, Any]]:
+    """
+    Attempts to parse a JSON string that may be incomplete or malformed.
+    Tries to fix common issues like missing closing brackets or quotes.
+    
+    Args:
+        s: The JSON string to parse.
+        
+    Returns:
+        Parsed JSON object or None if parsing fails.
+    """
     try:
+        # Try parsing as-is first
         return json.loads(s)
-    except:
+    except (json.JSONDecodeError, TypeError):
         pass
-
-    # Initialize variables.
+    
+    # Initialize parsing state
     new_s = ""
     stack = []
     is_inside_string = False
     escaped = False
-
-    # Process each character in the string one at a time.
+    
+    # Process each character to fix common issues
     for char in s:
         if is_inside_string:
             if char == '"' and not escaped:
                 is_inside_string = False
             elif char == "\n" and not escaped:
-                char = "\\n"  # Replace the newline character with the escape sequence.
+                char = "\\n"  # Replace newline with escape sequence
             elif char == "\\":
                 escaped = not escaped
             else:
@@ -83,241 +88,216 @@ def parse_partial_json(s):
                 if stack and stack[-1] == char:
                     stack.pop()
                 else:
-                    # Mismatched closing character; the input is malformed.
+                    # Mismatched closing character
                     return None
-
-        # Append the processed character to the new string.
+        
         new_s += char
-
-    # If we're still inside a string at the end of processing, we need to close the string.
+    
+    # Close any remaining open structures
     if is_inside_string:
         new_s += '"'
-
-    # Close any remaining open structures in the reverse order that they were opened.
     for closing_char in reversed(stack):
         new_s += closing_char
-
-    # Attempt to parse the modified string as JSON.
+    
     try:
         return json.loads(new_s)
-    except:
-        # If we still can't parse the string as JSON, return None to indicate failure.
+    except (json.JSONDecodeError, TypeError):
         return None
 
-
-def merge_deltas(original, delta):
+def merge_deltas(original: Dict[str, Any], delta: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Pushes the delta into the original and returns that.
-
-    Great for reconstructing OpenAI streaming responses -> complete message objects.
+    Merges a delta dictionary into the original dictionary recursively.
+    Used for reconstructing streaming responses from language models.
+    
+    Args:
+        original: The original dictionary to update.
+        delta: The delta dictionary with updates.
+        
+    Returns:
+        The updated original dictionary.
     """
-
     for key, value in dict(delta).items():
-        if value != None:
+        if value is not None:
             if isinstance(value, str):
-                if key in original:
-                    original[key] = (original[key] or "") + (value or "")
-                else:
-                    original[key] = value
+                original[key] = (original.get(key) or "") + (value or "")
             else:
                 value = dict(value)
                 if key not in original:
                     original[key] = value
                 else:
                     merge_deltas(original[key], value)
-
     return original
 
-
-def run_function_calling_llm(llm, request_params):
-    ## Setup
-
-    # # Add languages OI has access to
-    # function_schema["parameters"]["properties"]["language"]["enum"] = [
-    #     i.name.lower() for i in llm.interpreter.computer.terminal.languages
-    # ]
-    # request_params["functions"] = [function_schema]
-
-    # # Add OpenAI's recommended function message
-    # request_params["messages"][0][
-    #     "content"
-    # ] += "\nUse ONLY the function you have been provided with — 'execute(language, code)'."
-
-    ## Convert output to LMC format
-
+def run_function_calling_llm(llm: Any, request_params: Dict[str, Any]) -> Generator[Dict[str, Any], None, None]:
+    """
+    Executes a function-calling LLM request and processes the response stream.
+    
+    Args:
+        llm: The LLM client instance.
+        request_params: Parameters for the LLM request.
+        
+    Yields:
+        Processed response chunks in LMC format.
+    """
     accumulated_deltas = {}
     language = None
     code = ""
-
+    
     for chunk in llm.completions(**request_params):
         if "choices" not in chunk or len(chunk["choices"]) == 0:
-            # This happens sometimes
             continue
-
+            
         delta = chunk["choices"][0]["delta"]
-
-        # Accumulate deltas
         accumulated_deltas = merge_deltas(accumulated_deltas, delta)
-
+        
         if "content" in delta and delta["content"]:
             yield {"type": "message", "content": delta["content"]}
-
-        if (
-            accumulated_deltas.get("function_call")
-            and "arguments" in accumulated_deltas["function_call"]
-            and accumulated_deltas["function_call"]["arguments"]
-        ):
-            if (
-                "name" in accumulated_deltas["function_call"]
-                and accumulated_deltas["function_call"]["name"] == "execute"
-            ):
+            
+        if (accumulated_deltas.get("function_call") and 
+            "arguments" in accumulated_deltas["function_call"] and 
+            accumulated_deltas["function_call"]["arguments"]):
+            
+            if ("name" in accumulated_deltas["function_call"] and 
+                accumulated_deltas["function_call"]["name"] == "execute"):
+                
                 arguments = accumulated_deltas["function_call"]["arguments"]
                 arguments = parse_partial_json(arguments)
-
+                
                 if arguments:
-                    if (
-                        language is None
-                        and "language" in arguments
-                        and "code"
-                        in arguments  # <- This ensures we're *finished* typing language, as opposed to partially done
-                        and arguments["language"]
-                    ):
+                    if (language is None and 
+                        "language" in arguments and 
+                        "code" in arguments and 
+                        arguments["language"]):
                         language = arguments["language"]
-
+                        
                     if language is not None and "code" in arguments:
-                        # Calculate the delta (new characters only)
-                        code_delta = arguments["code"][len(code) :]
-                        # Update the code
+                        code_delta = arguments["code"][len(code):]
                         code = arguments["code"]
-                        # Yield the delta
                         if code_delta:
                             yield {
                                 "type": "code",
                                 "format": language,
-                                "content": code_delta,
+                                "content": code_delta
                             }
                 else:
                     if llm.interpreter.verbose:
-                        print("Arguments not a dict.")
-
-            # Common hallucinations
+                        print("Arguments not a valid dictionary.")
+                        
+            # Handle common hallucinations
             elif "name" in accumulated_deltas["function_call"] and (
-                accumulated_deltas["function_call"]["name"] == "python"
-                or accumulated_deltas["function_call"]["name"] == "functions"
-            ):
+                accumulated_deltas["function_call"]["name"] == "python" or 
+                accumulated_deltas["function_call"]["name"] == "functions"):
+                
                 if llm.interpreter.verbose:
-                    print("Got direct python call")
+                    print("Received direct python call")
+                    
                 if language is None:
                     language = "python"
-
+                    
                 if language is not None:
-                    # Pull the code string straight out of the "arguments" string
-                    code_delta = accumulated_deltas["function_call"]["arguments"][
-                        len(code) :
-                    ]
-                    # Update the code
+                    code_delta = accumulated_deltas["function_call"]["arguments"][len(code):]
                     code = accumulated_deltas["function_call"]["arguments"]
-                    # Yield the delta
                     if code_delta:
                         yield {
                             "type": "code",
                             "format": language,
-                            "content": code_delta,
+                            "content": code_delta
                         }
-
             else:
-                # If name exists and it's not "execute" or "python" or "functions", who knows what's going on.
                 if "name" in accumulated_deltas["function_call"]:
                     yield {
                         "type": "code",
                         "format": "python",
-                        "content": accumulated_deltas["function_call"]["name"],
+                        "content": accumulated_deltas["function_call"]["name"]
                     }
                     return
 
-
-def run_text_llm(llm, params):
-    ## Setup
-
+def run_text_llm(llm: Any, params: Dict[str, Any]) -> Generator[Dict[str, Any], None, None]:
+    """
+    Executes a text-based LLM request and processes the response stream.
+    
+    Args:
+        llm: The LLM client instance.
+        params: Parameters for the LLM request.
+        
+    Yields:
+        Processed response chunks in LMC format.
+    """
     try:
-        # Add the system message
-        params["messages"][0][
-            "content"
-        ] += "\nTo execute code on the user's machine, write a markdown code block. Specify the language after the ```. You will receive the output. Use any programming language."
-    except:
+        # Add code execution instructions to the system message
+        params["messages"][0]["content"] += (
+            "\nTo execute code on the user's machine, write a markdown code block. "
+            "Specify the language after the ```. You will receive the output. "
+            "Use any programming language."
+        )
+    except Exception as e:
         print('params["messages"][0]', params["messages"][0])
         raise
-
-    ## Convert output to LMC format
-
+        
     inside_code_block = False
     accumulated_block = ""
     language = None
-
+    
     for chunk in llm.completions(**params):
         if llm.interpreter.verbose:
-            print("Chunk in coding_llm", chunk)
-
+            print("Chunk in text-based LLM", chunk)
+            
         if "choices" not in chunk or len(chunk["choices"]) == 0:
-            # This happens sometimes
             continue
-
+            
         content = chunk["choices"][0]["delta"].get("content", "")
-
-        if content == None:
+        if content is None:
             continue
-
+            
         accumulated_block += content
-
+        
         if accumulated_block.endswith("`"):
-            # We might be writing "```" one token at a time.
+            # Might be part of a markdown code block delimiter
             continue
-
-        # Did we just enter a code block?
+            
+        # Check if entering a code block
         if "```" in accumulated_block and not inside_code_block:
             inside_code_block = True
             accumulated_block = accumulated_block.split("```")[1]
-
-        # Did we just exit a code block?
+            
+        # Check if exiting a code block
         if inside_code_block and "```" in accumulated_block:
             return
-
-        # If we're in a code block,
+            
+        # Process code block content
         if inside_code_block:
-            # If we don't have a `language`, find it
             if language is None and "\n" in accumulated_block:
                 language = accumulated_block.split("\n")[0]
-
-                # Default to python if not specified
+                
+                # Default to python if language not specified
                 if language == "":
-                    if llm.interpreter.os == False:
+                    if not llm.interpreter.os:
                         language = "python"
-                    elif llm.interpreter.os == False:
-                        # OS mode does this frequently. Takes notes with markdown code blocks
+                    else:
                         language = "text"
                 else:
-                    # Removes hallucinations containing spaces or non letters.
+                    # Clean up language name from hallucinated characters
                     language = "".join(char for char in language if char.isalpha())
-
-            # If we do have a `language`, send it out
+                    
             if language:
                 yield {
                     "type": "code",
                     "format": language,
-                    "content": content.replace(language, ""),
+                    "content": content.replace(language, "")
                 }
-
-        # If we're not in a code block, send the output as a message
+                
+        # Process non-code content
         if not inside_code_block:
             yield {"type": "message", "content": content}
 
-
-def display_markdown_message(message):
+def display_markdown_message(message: str) -> None:
     """
-    Display markdown message. Works with multiline strings with lots of indentation.
-    Will automatically make single line > tags beautiful.
+    Displays a markdown-formatted message using rich formatting.
+    Handles multi-line strings and ensures proper rendering of markdown elements.
+    
+    Args:
+        message: The markdown-formatted message to display.
     """
-
     for line in message.split("\n"):
         line = line.strip()
         if line == "":
@@ -328,85 +308,79 @@ def display_markdown_message(message):
             try:
                 rich_print(Markdown(line))
             except UnicodeEncodeError as e:
-                # Replace the problematic character or handle the error as needed
                 print("Error displaying line:", line)
-
+                
     if "\n" not in message and message.startswith(">"):
-        # Aesthetic choice. For these tags, they need a space below them
+        # Add spacing for blockquotes
         print("")
 
-
 def convert_to_openai_messages(
-    messages,
-    function_calling=True,
-    vision=False,
-    shrink_images=True,
-    code_output_sender="assistant",
-):
+    messages: List[Dict[str, Any]],
+    function_calling: bool = True,
+    vision: bool = False,
+    shrink_images: bool = True,
+    code_output_sender: str = "assistant"
+) -> List[Dict[str, Any]]:
     """
-    Converts LMC messages into OpenAI messages
+    Converts messages from LMC format to OpenAI-compatible format.
+    Handles different message types including text, code, console output, images, and files.
+    
+    Args:
+        messages: List of messages in LMC format.
+        function_calling: Whether function calling is enabled.
+        vision: Whether vision capabilities are enabled.
+        shrink_images: Whether to shrink images to reduce size.
+        code_output_sender: Sender role for code outputs.
+        
+    Returns:
+        List of messages in OpenAI-compatible format.
     """
     new_messages = []
-
+    
     for message in messages:
-        # Is this for thine eyes?
+        # Skip messages not intended for the assistant
         if "recipient" in message and message["recipient"] != "assistant":
             continue
-
+            
         new_message = {}
-
+        
         if message["type"] == "message":
-            new_message["role"] = message[
-                "role"
-            ]  # This should never be `computer`, right?
+            new_message["role"] = message["role"]
             new_message["content"] = message["content"]
-
+            
         elif message["type"] == "code":
             new_message["role"] = "assistant"
             if function_calling:
                 new_message["function_call"] = {
                     "name": "execute",
-                    "arguments": json.dumps(
-                        {"language": message["format"], "code": message["content"]}
-                    ),
-                    # parsed_arguments isn't actually an OpenAI thing, it's an OI thing.
-                    # but it's soo useful!
+                    "arguments": json.dumps({
+                        "language": message["format"],
+                        "code": message["content"]
+                    }),
                     "parsed_arguments": {
                         "language": message["format"],
-                        "code": message["content"],
-                    },
+                        "code": message["content"]
+                    }
                 }
-                # Add empty content to avoid error "openai.error.InvalidRequestError: 'content' is a required property - 'messages.*'"
-                # especially for the OpenAI service hosted on Azure
+                # Ensure required content field exists
                 new_message["content"] = ""
             else:
-                new_message[
-                    "content"
-                ] = f"""```{message["format"]}\n{message["content"]}\n```"""
-
+                new_message["content"] = f"```${message['format']}\n${message['content']}\n```"
+                
         elif message["type"] == "console" and message["format"] == "output":
             if function_calling:
                 new_message["role"] = "function"
                 new_message["name"] = "execute"
-                if message["content"].strip() == "":
-                    new_message[
-                        "content"
-                    ] = "No output"  # I think it's best to be explicit, but we should test this.
-                else:
-                    new_message["content"] = message["content"]
-
+                new_message["content"] = message["content"].strip() or "No output"
             else:
-                # This should be experimented with.
                 if code_output_sender == "user":
                     if message["content"].strip() == "":
-                        content = "The code above was executed on my machine. It produced no text output. what's next (if anything, or are we done?)"
+                        content = "The code executed on my machine produced no output. What's next?"
                     else:
                         content = (
-                            "Code output: "
-                            + message["content"]
-                            + "\n\nWhat does this output mean / what's next (if anything, or are we done)?"
+                            f"Code output: {message['content']}\n\n"
+                            "What does this output mean or what should I do next?"
                         )
-
                     new_message["role"] = "user"
                     new_message["content"] = content
                 elif code_output_sender == "assistant":
@@ -417,304 +391,212 @@ def convert_to_openai_messages(
                         )
                     else:
                         new_message["role"] = "assistant"
-                        new_message["content"] = (
-                            "\n```output\n" + message["content"] + "\n```"
-                        )
-
+                        new_message["content"] = f"\n```output\n{message['content']}\n```"
+                        
         elif message["type"] == "image":
-            if vision == False:
+            if not vision:
                 continue
-
+                
             if "base64" in message["format"]:
-                # Extract the extension from the format, default to 'png' if not specified
-                if "." in message["format"]:
-                    extension = message["format"].split(".")[-1]
-                else:
-                    extension = "png"
-
-                # Construct the content string
+                # Extract image extension
+                extension = message["format"].split(".")[-1] if "." in message["format"] else "png"
                 content = f"data:image/{extension};base64,{message['content']}"
-
+                
                 if shrink_images:
                     try:
-                        # Decode the base64 image
+                        # Decode and resize image if needed
                         img_data = base64.b64decode(message["content"])
                         img = Image.open(io.BytesIO(img_data))
-
-                        # Resize the image if it's width is more than 1024
+                        
                         if img.width > 1024:
                             new_height = int(img.height * 1024 / img.width)
                             img = img.resize((1024, new_height))
-
-                        # Convert the image back to base64
+                            
                         buffered = io.BytesIO()
                         img.save(buffered, format=extension)
                         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
                         content = f"data:image/{extension};base64,{img_str}"
-                    except:
-                        # This should be non blocking. It's not required
-                        # print("Failed to shrink image. Proceeding with original image size.")
+                    except Exception as e:
+                        # Non-blocking error handling
                         pass
-
+                        
             elif message["format"] == "path":
-                # Convert to base64
+                # Convert image path to base64
                 image_path = message["content"]
                 file_extension = image_path.split(".")[-1]
-
+                
                 with open(image_path, "rb") as image_file:
                     encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-
+                    
                 content = f"data:image/{file_extension};base64,{encoded_string}"
             else:
-                # Probably would be better to move this to a validation pass
-                # Near core, through the whole messages object
                 if "format" not in message:
-                    raise Exception("Format of the image is not specified.")
+                    raise Exception("Image format not specified.")
                 else:
-                    raise Exception(f"Unrecognized image format: {message['format']}")
-
-            # Calculate the size of the original binary data in bytes
+                    raise Exception(f"Unsupported image format: {message['format']}")
+                    
+            # Validate image size
             content_size_bytes = len(content) * 3 / 4
-
-            # Convert the size to MB
             content_size_mb = content_size_bytes / (1024 * 1024)
-
-            # Print the size of the content in MB
-            # print(f"File size: {content_size_mb} MB")
-
-            # Assert that the content size is under 20 MB
-            assert content_size_mb < 20, "Content size exceeds 20 MB"
-
+            
+            assert content_size_mb < 20, "Image size exceeds 20 MB"
+            
             new_message = {
                 "role": "user",
                 "content": [
                     {
                         "type": "image_url",
-                        "image_url": {"url": content, "detail": "low"},
+                        "image_url": {"url": content, "detail": "low"}
                     }
-                ],
+                ]
             }
-
+            
         elif message["type"] == "file":
             new_message = {"role": "user", "content": message["content"]}
-
+            
         else:
-            raise Exception(f"Unable to convert this message type: {message}")
-
+            raise Exception(f"Unsupported message type: {message}")
+            
         if isinstance(new_message["content"], str):
             new_message["content"] = new_message["content"].strip()
-
+            
         new_messages.append(new_message)
-
-    """
-    # Combine adjacent user messages
-    combined_messages = []
-    i = 0
-    while i < len(new_messages):
-        message = new_messages[i]
-        if message["role"] == "user":
-            combined_content = []
-            while i < len(new_messages) and new_messages[i]["role"] == "user":
-                if isinstance(new_messages[i]["content"], str):
-                    combined_content.append({
-                        "type": "text",
-                        "text": new_messages[i]["content"]
-                    })
-                elif isinstance(new_messages[i]["content"], list):
-                    combined_content.extend(new_messages[i]["content"])
-                i += 1
-            message["content"] = combined_content
-        combined_messages.append(message)
-        i += 1
-    new_messages = combined_messages
-
-    if not function_calling:
-        # Combine adjacent assistant messages, as "function calls" will just be normal messages with content: markdown code blocks
-        combined_messages = []
-        i = 0
-        while i < len(new_messages):
-            message = new_messages[i]
-            if message["role"] == "assistant":
-                combined_content = ""
-                while i < len(new_messages) and new_messages[i]["role"] == "assistant":
-                    combined_content += new_messages[i]["content"] + "\n\n"
-                    i += 1
-                message["content"] = combined_content.strip()
-            combined_messages.append(message)
-            i += 1
-        new_messages = combined_messages
-    """
-
+        
     return new_messages
-
 
 class Llm:
     """
-    A stateless LMC-style LLM with some helpful properties.
+    A stateless LLM client that processes messages in LMC format.
+    Handles interactions with language models, including message formatting,
+    context management, and response processing.
     """
-
     def __init__(self):
-
-        # Chat completions "endpoint"
         self.completions = fixed_litellm_completions
-
-        # Settings
+        
+        # Model configuration
         self.model = MODEL_NAME
         self.temperature = 0
         self.supports_vision = False
-        self.supports_functions = None  # Will try to auto-detect
+        self.supports_functions = None  # Auto-detected
         self.shrink_images = None
-
-        # Optional settings
+        
+        # Context and token limits
         self.context_window = None
         self.max_tokens = None
+        
+        # API configuration
         self.api_base = BASE_URL
         self.api_key = OPENAI_API_KEY
         self.api_version = None
-
-        # Budget manager powered by LiteLLM
+        
+        # Budget and verbosity
         self.max_budget = None
         self.verbose = False
-
-    def run(self, messages):
+        
+    def run(self, messages: List[Dict[str, Any]]) -> Generator[Dict[str, Any], None, None]:
         """
-        We're responsible for formatting the call into the llm.completions object,
-        starting with LMC messages in interpreter.messages, going to OpenAI compatible messages into the llm,
-        respecting whether it's a vision or function model, respecting its context window and max tokens, etc.
-
-        And then processing its output, whether it's a function or non function calling model, into LMC format.
+        Processes messages through the LLM, handling message formatting, context management,
+        and response generation.
+        
+        Args:
+            messages: List of messages in LMC format.
+            
+        Yields:
+            Processed response chunks from the LLM.
         """
-
-        # Assertions
-        assert (
-            messages[0]["role"] == "system"
-        ), "First message must have the role 'system'"
+        # Validate message structure
+        assert messages[0]["role"] == "system", "First message must be a system message"
         for msg in messages[1:]:
-            assert (
-                msg["role"] != "system"
-            ), "No message after the first can have the role 'system'"
-
+            assert msg["role"] != "system", "Only the first message can be a system message"
+            
         # Detect function support
-        if self.supports_functions != None:
+        if self.supports_functions is not None:
             supports_functions = self.supports_functions
         else:
-            # Guess whether or not it's a function calling LLM
-            # Once Litellm supports it, add Anthropic models here
-            if self.model != "gpt-4-vision-preview" and self.model in litellm.open_ai_chat_completion_models or self.model.startswith("azure/"):
+            # Guess function support based on model name
+            if (self.model != "gpt-4-vision-preview" and 
+                (self.model in litellm.open_ai_chat_completion_models or 
+                 self.model.startswith("azure/"))):
                 supports_functions = True
             else:
                 supports_functions = False
-
-        # Trim image messages if they're there
+                
+        # Manage image messages for vision models
         if self.supports_vision:
             image_messages = [msg for msg in messages if msg["type"] == "image"]
-
-            if self.interpreter.os:
-                # Keep only the last two images if the interpreter is running in OS mode
+            
+            if getattr(self, 'interpreter', None) and getattr(self.interpreter, 'os', False):
+                # Keep only the last two images in OS mode
                 if len(image_messages) > 1:
                     for img_msg in image_messages[:-2]:
                         messages.remove(img_msg)
-                        if self.interpreter.verbose:
-                            print("Removing image message!")
+                        if self.verbose:
+                            print("Removing image message to conserve context")
             else:
-                # Delete all the middle ones (leave only the first and last 2 images) from messages_for_llm
+                # Keep first and last two images in normal mode
                 if len(image_messages) > 3:
                     for img_msg in image_messages[1:-2]:
                         messages.remove(img_msg)
-                        if self.interpreter.verbose:
-                            print("Removing image message!")
-                # Idea: we could set detail: low for the middle messages, instead of deleting them
-
-        # Convert to OpenAI messages format
-        # messages = convert_to_openai_messages(
-        #     messages,
-        #     function_calling=supports_functions,
-        #     vision=self.supports_vision,
-        #     shrink_images=self.shrink_images,
-        # )
-
-        # if self.interpreter.debug:
-        #     print("\n\n\nOPENAI COMPATIBLE MESSAGES\n\n\n")
-        #     for message in messages:
-        #         if len(str(message)) > 5000:
-        #             print(str(message)[:200] + "...")
-        #         else:
-        #             print(message)
-        #         print("\n")
-        #     print("\n\n\n")
-
+                        if self.verbose:
+                            print("Removing image message to conserve context")
+                            
+        # Separate system message for token trimming
         system_message = messages[0]["content"]
         messages = messages[1:]
-
-        # Trim messages
+        
+        # Trim messages to fit context window
         try:
             if self.context_window and self.max_tokens:
-                trim_to_be_this_many_tokens = (
-                    self.context_window - self.max_tokens - 25
-                )  # arbitrary buffer
+                trim_target = self.context_window - self.max_tokens - 25  # Buffer tokens
                 messages = tt.trim(
                     messages,
                     system_message=system_message,
-                    max_tokens=trim_to_be_this_many_tokens,
+                    max_tokens=trim_target
                 )
             elif self.context_window and not self.max_tokens:
-                # Just trim to the context window if max_tokens not set
                 messages = tt.trim(
                     messages,
                     system_message=system_message,
-                    max_tokens=self.context_window,
+                    max_tokens=self.context_window
                 )
             else:
                 try:
                     messages = tt.trim(
-                        messages, system_message=system_message, model=self.model
+                        messages,
+                        system_message=system_message,
+                        model=self.model
                     )
-                except:
+                except Exception as e:
                     if len(messages) == 1:
-                        if self.interpreter.in_terminal_interface:
-                            display_markdown_message(
-                                """
-**We were unable to determine the context window of this model.** Defaulting to 3000.
-
-If your model can handle more, run `interpreter --context_window {token limit} --max_tokens {max tokens per response}`.
-
+                        if getattr(self, 'interpreter', None) and getattr(self.interpreter, 'in_terminal_interface', False):
+                            display_markdown_message("""
+**Warning**: Could not determine context window size for this model. Defaulting to 3000 tokens.
+To override, use `interpreter --context_window {token_limit} --max_tokens {max_tokens}`.
 Continuing...
-                            """
-                            )
+                            """)
                         else:
-                            display_markdown_message(
-                                """
-**We were unable to determine the context window of this model.** Defaulting to 3000.
-
-If your model can handle more, run `interpreter.llm.context_window = {token limit}`.
-
-Also please set `interpreter.llm.max_tokens = {max tokens per response}`.
-
+                            display_markdown_message("""
+**Warning**: Could not determine context window size for this model. Defaulting to 3000 tokens.
+To override, set `interpreter.llm.context_window = {token_limit}` and `interpreter.llm.max_tokens`.
 Continuing...
-                            """
-                            )
+                            """)
                     messages = tt.trim(
-                        messages, system_message=system_message, max_tokens=3000
+                        messages,
+                        system_message=system_message,
+                        max_tokens=3000
                     )
-        except:
-            # If we're trimming messages, this won't work.
-            # If we're trimming from a model we don't know, this won't work.
-            # Better not to fail until `messages` is too big, just for frustrations sake, I suppose.
-
-            # Reunite system message with messages
+        except Exception as e:
+            # Reunite system message with messages if trimming fails
             messages = [{"role": "system", "content": system_message}] + messages
-
-            pass
-
-        ## Start forming the request
-
+            
+        # Prepare request parameters
         params = {
             "model": self.model,
             "messages": messages,
-            "stream": True,
+            "stream": True
         }
-
-        # Optional inputs
+        
+        # Add optional parameters
         if self.api_key:
             params["api_key"] = self.api_key
         if self.api_base:
@@ -725,66 +607,112 @@ Continuing...
             params["max_tokens"] = self.max_tokens
         if self.temperature:
             params["temperature"] = self.temperature
-
-        # Set some params directly on LiteLLM
+            
+        # Configure LiteLLM settings
         if self.max_budget:
             litellm.max_budget = self.max_budget
         if self.verbose:
             litellm.set_verbose = True
-
+            
+        # Route request based on function support
         if supports_functions:
             yield from run_function_calling_llm(self, params)
         else:
             yield from run_text_llm(self, params)
 
-
-def fixed_litellm_completions(**params):
+def fixed_litellm_completions(**params) -> Generator[Dict[str, Any], None, None]:
     """
-    Just uses a dummy API key, since we use litellm without an API key sometimes.
-    Hopefully they will fix this!
+    Wrapper for litellm.completion that handles API key errors by retrying with a dummy key.
+    This allows local models that don't require an API key to work without errors.
+    
+    Args:
+        **params: Parameters for the litellm completion call.
+        
+    Yields:
+        Response chunks from the LLM.
     """
-
-    # Run completion
     first_error = None
     try:
         yield from litellm.completion(**params)
     except Exception as e:
-        # Store the first error
         first_error = e
-        # LiteLLM can fail if there's no API key,
-        # even though some models (like local ones) don't require it.
-
+        # Retry with dummy API key if authentication error occurs
         if "api key" in str(first_error).lower() and "api_key" not in params:
-            print(
-                "LiteLLM requires an API key. Please set a dummy API key to prevent this message. (e.g `interpreter --api_key x` or `interpreter.llm.api_key = 'x'`)"
-            )
-
-        # So, let's try one more time with a dummy API key:
-        params["api_key"] = "x"
-
-        try:
-            yield from litellm.completion(**params)
-        except:
-            # If the second attempt also fails, raise the first error
+            print("LiteLLM requires an API key. Using a dummy key to proceed.")
+            params["api_key"] = "x"
+            
+            try:
+                yield from litellm.completion(**params)
+            except:
+                raise first_error
+        else:
             raise first_error
 
-
-def main():
+def main() -> None:
+    """
+    Main function for testing the LLM client.
+    Demonstrates sending a request to generate stock price visualizations.
+    """
     start_time = time.time()
+    
+    # Initialize LLM client
     llm = Llm()
-    # query = '你好，请随便和我说点什么'
-    messages = [{'role': 'system', 'content': 'You are Open Interpreter, a world-class programmer that can complete any goal by executing code.\nFirst, write a plan. **Always recap the plan between each code block** (you have extreme short-term memory loss, so you need to recap the plan between each message block to retain it).\nWhen you execute code, it will be executed **on the user\'s machine**. The user has given you **full and complete permission** to execute any code necessary to complete the task. Execute the code.\nIf you want to send data between programming languages, save the data to a txt or json.\nYou can access the internet. Run **any code** to achieve the goal, and if at first you don\'t succeed, try again and again.\nYou can install new packages.\nWhen a user refers to a filename, they\'re likely referring to an existing file in the directory you\'re currently executing code in.\nWrite messages to the user in Markdown.\nIn general, try to **make plans** with as few steps as possible. As for actually executing code to carry out that plan, for *stateful* languages (like python, javascript, shell, but NOT for html which starts from 0 every time) **it\'s critical not to try to do everything in one code block.** You should try something, print information about it, then continue from there in tiny, informed steps. You will never get it on the first try, and attempting it in one go will often lead to errors you cant see.\nYou are capable of **any** task.\n\n# THE COMPUTER API\n\nA python `computer` module is ALREADY IMPORTED, and can be used for many tasks:\n\n```python\ncomputer.browser.search(query) # Google search results will be returned from this function as a string\ncomputer.files.edit(path_to_file, original_text, replacement_text) # Edit a file\ncomputer.calendar.create_event(title="Meeting", start_date=datetime.datetime.now(), end=datetime.datetime.now() + datetime.timedelta(hours=1), notes="Note", location="") # Creates a calendar event\ncomputer.calendar.get_events(start_date=datetime.date.today(), end_date=None) # Get events between dates. If end_date is None, only gets events for start_date\ncomputer.calendar.delete_event(event_title="Meeting", start_date=datetime.datetime) # Delete a specific event with a matching title and start date, you may need to get use get_events() to find the specific event object first\ncomputer.contacts.get_phone_number("John Doe")\ncomputer.contacts.get_email_address("John Doe")\ncomputer.mail.send("john@email.com", "Meeting Reminder", "Reminder that our meeting is at 3pm today.", ["path/to/attachment.pdf", "path/to/attachment2.pdf"]) # Send an email with a optional attachments\ncomputer.mail.get(4, unread=True) # Returns the {number} of unread emails, or all emails if False is passed\ncomputer.mail.unread_count() # Returns the number of unread emails\ncomputer.sms.send("555-123-4567", "Hello from the computer!") # Send a text message. MUST be a phone number, so use computer.contacts.get_phone_number frequently here\n```\n\nDo not import the computer module, or any of its sub-modules. They are already imported.\n\nUser InfoName: hanchengcheng\nCWD: /Users/hanchengcheng/Documents/official_space/open-interpreter\nSHELL: /bin/bash\nOS: Darwin\nUse ONLY the function you have been provided with — \'execute(language, code)\'.'}, {'role': 'user', 'content': "Plot AAPL and META's normalized stock prices"}]
-    # functions = {'name': 'execute', 'description': "Executes code on the user's machine **in the users local environment** and returns the output", 'parameters': {'type': 'object', 'properties': {'language': {'type': 'string', 'description': 'The programming language (required parameter to the `execute` function)', 'enum': ['ruby', 'python', 'shell', 'javascript', 'html', 'applescript', 'r', 'powershell', 'react']}, 'code': {'type': 'string', 'description': 'The code to execute (required)'}}, 'required': ['language', 'code']}}
-    # request_params = {'model': 'gpt-4-0125-preview', 'messages': messages, 'stream': True, 'api_key': 'sk-RoqgGFXo94mScVAo8aFdC3Ec36E14eFbAeE0D72f9437292a', 'api_base': 'https://api.chatweb.plus/v1', 'functions': [functions]}
+    
+    # Prepare system and user messages
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are Open Interpreter, a world-class programmer capable of completing any task by executing code.\n"
+                "Follow these guidelines:\n"
+                "1. Always begin with a plan and recap it between code blocks.\n"
+                "2. Execute code on the user's machine with full permission.\n"
+                "3. Use txt or json files to exchange data between programming languages.\n"
+                "4. You can access the internet and install new packages.\n"
+                "5. Communicate with the user using Markdown formatting.\n"
+                "6. Break down complex tasks into small, iterative steps.\n\n"
+                "# COMPUTER API\n"
+                "A `computer` module is pre-imported with these functions:\n"
+                "```python\n"
+                "computer.browser.search(query)  # Returns Google search results\n"
+                "computer.files.edit(path, original, replacement)  # Edits a file\n"
+                "computer.calendar.create_event(title, start, end, notes, location)  # Creates a calendar event\n"
+                "computer.calendar.get_events(start_date, end_date=None)  # Gets calendar events\n"
+                "computer.calendar.delete_event(title, start_date)  # Deletes a calendar event\n"
+                "computer.contacts.get_phone_number(name)  # Gets a phone number\n"
+                "computer.contacts.get_email_address(name)  # Gets an email address\n"
+                "computer.mail.send(to, subject, body, attachments)  # Sends an email\n"
+                "computer.mail.get(count, unread=True)  # Gets emails\n"
+                "computer.mail.unread_count()  # Counts unread emails\n"
+                "computer.sms.send(phone_number, message)  # Sends a text message\n"
+                "```\n"
+                "Do not import the computer module; it is already available.\n\n"
+                "User Info:\n"
+                "Name: hanchengcheng\n"
+                "CWD: /Users/hanchengcheng/Documents/official_space/open-interpreter\n"
+                "SHELL: /bin/bash\n"
+                "OS: Darwin\n"
+                "Use only the provided `execute(language, code)` function."
+            )
+        },
+        {
+            "role": "user",
+            "content": "Plot AAPL and META's normalized stock prices"
+        }
+    ]
+    
+    # Generate response
     response = ''
     for output in llm.run(messages):
-        response += output['content']
-        # print(output)
+        response += output.get('content', '')
+        
     print(response)
+    
+    # Log execution statistics
     end_time = time.time()
     execution_time = end_time - start_time
-    print(f"生成的单词数: {len(response)}")
-    print(f"程序执行时间: {execution_time}秒")
+    print(f"Response length: {len(response)} characters")
+    print(f"Execution time: {execution_time:.2f} seconds")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -15,41 +15,43 @@ from oscopilot.tool_repository.api_tools.wolfram_alpha.wolfram_alpha import rout
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-
 class LoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to log incoming requests and outgoing responses, including errors.
+    """
     async def dispatch(self, request: Request, call_next):
         print(f"Incoming request: {request.method} {request.url}")
         try:
             response = await call_next(request)
-        except Exception as e:
-            print(f"Request error: {str(e)}")
-            raise e from None
+        except Exception as exc:
+            print(f"Request error: {exc}")
+            raise exc from None
         else:
             print(f"Outgoing response: {response.status_code}")
         return response
 
 
+# Register the logging middleware
 app.add_middleware(LoggingMiddleware)
 
-# Create a dictionary that maps service names to their routers
+# Map service names to routers
 services = {
-    "bing": bing_router, # bing_search, image_search and web_loader
-    "autio2text": audio2text_router,
+    "bing": bing_router,            # Provides Bing search, image search, and web loading
+    "audio2text": audio2text_router,
     "image_caption": image_caption_router,
-    "wolfram_alpha": wolfram_alpha_router
+    "wolfram_alpha": wolfram_alpha_router,
 }
 
-server_list = ["bing", "autio2text", "image_caption"]
+# List of services to include in this server instance
+enabled_services = ["bing", "audio2text", "image_caption"]
 
-# Include only the routers for the services listed in server_list
-for service in server_list:
-    if service in services:
-        app.include_router(services[service])
+# Dynamically include only the enabled service routers
+for name in enabled_services:
+    router = services.get(name)
+    if router:
+        app.include_router(router)
 
-# proxy_manager = ConfigManager()
-# proxy_manager.apply_proxies()
 
 if __name__ == "__main__":
-    import uvicorn
-
+    # Start the Uvicorn ASGI server
     uvicorn.run(app, host="0.0.0.0", port=8079)

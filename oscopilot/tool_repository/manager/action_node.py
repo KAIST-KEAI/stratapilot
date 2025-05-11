@@ -1,114 +1,121 @@
 class ActionNode:
     """
-    Represents an action node in a workflow or execution graph, encapsulating details like the action's name, description,
-    return value, relevant code snippets, next actions, execution status, and action type.
+    Represents a single step in an execution workflow, storing metadata about the action,
+    including its name, description, type, and execution results.
 
     Attributes:
-        _name (str): The name of the action.
-        _description (str): A brief description of what the action does.
-        _return_val (str): The value returned by the action upon execution.
-        _relevant_code (dict): A dictionary mapping relevant code snippets or references associated with the action.
-        _next_action (dict): A dictionary mapping subsequent actions that depend on the current action.
-        _status (bool): The execution status of the action, indicating whether it has been successfully executed.
-        _type (str): The type of the action, categorizing its purpose or method of execution.
+        _name (str): Identifier for this action node.
+        _description (str): Brief explanation of what the action performs.
+        _return_val (str): Output produced when this action runs.
+        _relevant_code (dict): Related code snippets or references tied to this action.
+        _next_action (dict): Mapping of subsequent actions dependent on this one.
+        _status (bool): Execution state of the action (True if completed successfully).
+        _type (str): Category or classification of the action.
     """
-    def __init__(self, name, description, node_type):
+    def __init__(self, name: str, description: str, node_type: str):
         """
-        Initializes an instance of the ActionNode class with the given attributes.
+        Initialize an ActionNode with its name, description, and type.
 
         Args:
-            name (str): The name of the action.
-            description (str): A description of the action.
-            type (str): The type of the action.
+            name (str): The action's unique identifier.
+            description (str): A concise description of the action.
+            node_type (str): Classification of the action's purpose or execution style.
         """
         self._name = name
         self._description = description
-        self._return_val = ''
+        self._return_val = ""
         self._relevant_code = {}
         self._next_action = {}
         self._status = False
         self._type = node_type
 
     @property
-    def name(self):
+    def name(self) -> str:
         """
-        Returns the name of the action.
+        Get the action's identifier.
 
         Returns:
-            str: The action's name.
+            str: The node's name.
         """
         return self._name
-    
-    @property
-    def description(self):
-        """
-        Returns the description of the action.
-
-        Returns:
-            str: The action's description.
-        """
-        return self._description   
 
     @property
-    def return_val(self):
+    def description(self) -> str:
         """
-        Returns the return value of the action.
+        Get the action's description.
 
         Returns:
-            str: The value returned by the action upon execution.
+            str: A brief explanation of the action.
+        """
+        return self._description
+
+    @property
+    def return_val(self) -> str:
+        """
+        Get the result produced by this action.
+
+        Returns:
+            str: The action's output value.
         """
         return self._return_val
-   
+
     @property
-    def relevant_action(self):
+    def relevant_action(self) -> dict:
         """
-        Returns the relevant code snippets or references associated with the action.
+        Retrieve code snippets or references linked to this action.
 
         Returns:
-            dict: The action's relevant code snippets or references.
+            dict: Related code or reference data.
         """
         return self._relevant_code
-    
+
     @property
-    def status(self):
+    def status(self) -> bool:
         """
-        Returns the execution status of the action.
+        Check if the action has executed successfully.
 
         Returns:
-            bool: True if the action has been executed successfully, False otherwise.
+            bool: True if execution completed without errors, False otherwise.
         """
-        return self._status  
-    
+        return self._status
+
     @property
-    def node_type(self):
+    def node_type(self) -> str:
         """
-        Returns the type of the action.
+        Get the category or execution style of the action.
 
         Returns:
-            str: The action's type.
+            str: The action's type label.
         """
-        return self._type 
-    
+        return self._type
+
     @property
-    def next_action(self):
+    def next_action(self) -> dict:
         """
-        Returns subsequent actions that depend on the current action.
+        Retrieve any downstream actions dependent on this one.
 
         Returns:
-            dict: A mapping of subsequent actions.
+            dict: Mapping of subsequent action nodes.
         """
-        return self._next_action   
-    
-    def __str__(self):
+        return self._next_action
+
+    def __str__(self) -> str:
         """
-        Provides a string representation of the ActionNode instance.
+        Generate a formatted summary of the action node's attributes.
 
         Returns:
-            str: A formatted string detailing the action's properties.
+            str: Multi-line string listing the node's properties.
         """
-        return f"name: {self.name} \n description: {self.description} \n return: {self.return_val} \n relevant_action: {self._relevant_code} \n next_action: {self.next_action} \n status: {self.status} \n type: {self.node_type}"
+        return (
+            f"name: {self.name}\n"
+            f"description: {self.description}\n"
+            f"return_val: {self.return_val}\n"
+            f"relevant_code: {self._relevant_code}\n"
+            f"next_action: {self.next_action}\n"
+            f"status: {self.status}\n"
+            f"node_type: {self.node_type}"
+        )
 
-
-if __name__ == '__main__':
-    node = ActionNode('temp','xxx')
-    print(node.name)
+if __name__ == "__main__":
+    node = ActionNode("temp", "Example action", "Generic")
+    print(node)

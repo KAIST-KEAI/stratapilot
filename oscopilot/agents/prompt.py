@@ -1,28 +1,41 @@
 """
-This modules contains a comprehensive `prompts` dictionary that serves as a repository of prompts for guiding the AI agents's interactions across various operational scenarios, including execution, planning, and information retrieval tasks. These prompts are meticulously crafted to instruct the AI in performing its duties, ranging from code generation and amendment to task decomposition and planning, as well as error analysis and tool usage.
+This module defines a centralized `prompts` dictionary that stores all the templates used to guide
+AI agent behavior across different tasks, including code execution, task planning, information retrieval,
+and self-learning.
 
-The dictionary is segmented into three main categories:
+The dictionary is organized into five main sections:
 
-1. **execute_prompt**: Contains prompts for execution-related tasks, such as code generation, invocation, amendment, and error judgment. These are further detailed for system actions and user interactions, facilitating a diverse range of programming and troubleshooting tasks.
+1. **execute_prompt**  
+   Prompts for generating, invoking, debugging, and judging code or API calls.  
+   - System messages specify the agent’s responsibilities and constraints.  
+   - User messages supply context and dynamic parameters.
 
-2. **planning_prompt**: Focuses on task planning and re-planning, decomposing complex tasks into manageable sub-tasks, and adapting plans based on unforeseen issues, ensuring that the AI can assist in project management and task organization effectively.
+2. **planning_prompt**  
+   Prompts for breaking down high-level objectives into subtasks, adjusting plans when errors occur,
+   and managing workflows.
 
-3. **retrieve_prompt**: Dedicated to information retrieval, including filtering code snippets based on specific criteria, aiding the AI in sourcing and suggesting code solutions efficiently.
+3. **retrieve_prompt**  
+   Prompts for locating and filtering relevant code snippets, tool names, and descriptions to support
+   downstream tasks.
 
-4. **self_learning_prompt**: Contains prompts for self-learning tasks, such as designing educational courses based on software and content parameters. These prompts guide the AI in generating course designs and educational content tailored to user needs.
+4. **self_learning_prompt**  
+   Prompts for designing and iterating on self-paced learning courses, tailoring lesson plans to
+   software topics and user-provided materials.
 
-5. **text_extract_prompt**: Contains prompts for text extraction tasks, such as extracting specific information from text data. These prompts guide the AI in identifying and extracting relevant data from text inputs.
+5. **text_extract_prompt**  
+   Prompts for extracting specific information from text or files, guiding the agent to identify
+   and return relevant data segments.
 
-Each category comprises system and user prompts, where system prompts define the AI's task or query in detail, and user prompts typically include placeholders for dynamic information insertion, reflecting the context or specific requirements of the task at hand.
+Each section provides both “system” prompts (defining the agent’s role and objectives) and “user”
+prompts (containing placeholders for variable inputs). During runtime, the AI agent selects the
+appropriate prompt template from this dictionary based on the current operation, ensuring clear,
+task-specific instructions.
 
-Usage:
-The `prompts` dictionary is utilized by the AI agents to dynamically select appropriate prompts based on the current context or task, ensuring relevant and precise guidance for each operation. This dynamic approach allows the AI to adapt its interactions and responses to suit a wide array of programming and operational needs, enhancing its utility and effectiveness in assisting users.
+Example usage:
 
-Example:
-    .. code-block:: python
+# Retrieve the system-level prompt for creating and invoking a tool
+system_prompt = prompts['execute_prompt']['_SYSTEM_SKILL_CREATE_AND_INVOKE_PROMPT']
 
-        # Accessing a specific prompts for task execution
-        execute_prompt = prompts['execute_prompt']['_SYSTEM_SKILL_CREATE_AND_INVOKE_PROMPT']
 """
 prompt = {
     'execute_prompt': {
@@ -279,7 +292,7 @@ prompt = {
         Please begin your code completion:
         ''',
         '_USER_TOOL_USAGE_PROMPT': '''
-        from oscopilot.tool_repository.manager.tool_request_util import ToolRequestUtil
+        from stratapilot.tool_repository.manager.tool_request_util import ToolRequestUtil
         tool_request_util = ToolRequestUtil()
         # TODO: your code here
         ''',

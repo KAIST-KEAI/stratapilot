@@ -1,195 +1,187 @@
 # This code is based on Open Interpreter. Original source: https://github.com/OpenInterpreter/open-interpreter
+from stratapilot.environments import BaseEnv
+from stratapilot.environments import AppleScript
+from stratapilot.environments import PythonJupyterEnv
+from stratapilot.environments import Shell
+from stratapilot.utils.schema import EnvState
 
-from oscopilot.environments import BaseEnv
-from oscopilot.environments import AppleScript
-from oscopilot.environments import PythonJupyterEnv
-from oscopilot.environments import Shell
-from oscopilot.utils.schema import EnvState
+import os
 import subprocess
+from typing import Any, Dict, List, Optional, Generator
 
-# Should this be renamed to OS or System?
+
+class EnvState:
+    def __init__(self, command: str):
+        self.command: str = command
+        self.result: str = ""
+        self.error: str = ""
+        self.pwd: str = ""
+        self.ls: str = ""
 
 
-class Env(BaseEnv):
+class OutputChunk(Dict[str, Any]):
     """
-    A class representing an environment for executing code in various languages.
+    sample: console/output/active_line, content, recipient
+    """
+    pass
 
-    This class manages the execution of code in different languages and provides methods for interacting with
-    those languages.
 
-    It inherits from BaseEnv, which provides basic environment functionality.
-    """    
+class Language:
+    name: str = ""
+    aliases: List[str] = []
+
+    def step(self, code: str) -> EnvState:
+        raise NotImplementedError
+
+    def run(self, code: str) -> Generator[OutputChunk, None, None]:
+        raise NotImplementedError
+
+    def stop(self) -> None:
+        pass
+
+    def terminate(self) -> None:
+        pass
+
+
+class PythonJupyterEnv(Language):
+    name = "Python"
+    aliases = ["py"]
+
+    def step(self, code: str) -> EnvState:
+        state = EnvState(code)
+        try:
+            cp = subprocess.run(
+                ["python3", "-c", code],
+                capture_output=True, text=True
+            )
+            state.result = cp.stdout
+            state.error = cp.stderr
+        except Exception as e:
+            state.error = str(e)
+        return state
+
+    def run(self, code: str):
+        # simplification
+        st = self.step(code)
+        yield {"type": "console", "format": "output", "content": st.result}
+        if st.error:
+            yield {"type": "console", "format": "output", "content": st.error}
+
+
+class Shell(Language):
+    name = "Shell"
+    aliases = ["sh", "bash"]
+
+    def step(self, code: str) -> EnvState:
+        state = EnvState(code)
+        try:
+            cp = subprocess.run(
+                ["/bin/sh", "-c", code],
+                capture_output=True, text=True
+            )
+            state.result = cp.stdout
+            state.error = cp.stderr
+        except Exception as e:
+            state.error = str(e)
+        return state
+
+    def run(self, code: str):
+        st = self.step(code)
+        yield {"type": "console", "format": "output", "content": st.result}
+        if st.error:
+            yield {"type": "console", "format": "output", "content": st.error}
+
+
+class AppleScript(Language):
+    name = "AppleScript"
+    aliases = ["osascript"]
+
+    def step(self, code: str) -> EnvState:
+        state = EnvState(code)
+        try:
+            cp = subprocess.run(
+                ["osascript", "-e", code],
+                capture_output=True, text=True
+            )
+            state.result = cp.stdout
+            state.error = cp.stderr
+        except Exception as e:
+            state.error = str(e)
+        return state
+
+    def run(self, code: str):
+        st = self.step(code)
+        yield {"type": "console", "format": "output", "content": st.result}
+        if st.error:
+            yield {"type": "console", "format": "output", "content": st.error}
+
+
+class Env:
     def __init__(self):
-        """
-        Initializes the environment.
+        self.languages: List[Language] = [PythonJupyterEnv(), Shell(), AppleScript()]
+        self._active: Dict[str, Language] = {}
+        self.working_dir: str = os.getcwd()
 
-        Sets up the supported languages and initializes the active languages dictionary.
-        """        
-        super().__init__()
-        self.languages = [
-            PythonJupyterEnv,
-            Shell,
-            AppleScript,
-        ]
-        self._active_languages = {}
-
-    def get_language(self, language):
-        """
-        Gets the language class based on the provided language name or alias.
-
-        Args:
-            language (str): The name or alias of the language.
-
-        Returns:
-            class: The language class corresponding to the provided name or alias, or None if not found.
-        """        
-        # 输入planner的节点类型即可
+    def get_language(self, name: str) -> Optional[Language]:
+        key = name.lower()
         for lang in self.languages:
-            if language.lower() == lang.name.lower() or (
-                hasattr(lang, "aliases") and language.lower() in (alias.lower() for alias in lang.aliases)
-            ):
+            if lang.name.lower() == key or key in (a.lower() for a in lang.aliases):
                 return lang
         return None
 
-    def step(self, language, code, stream=False, display=False):
-        """
-        Executes a step of code in the specified language.
-
-        Args:
-            language (str): The name or alias of the language to execute the code in.
-            code (str): The code to execute.
-            stream (bool): Whether to stream the output as it becomes available.
-            display (bool): Whether to display the output.
-
-        Returns:
-            EnvState: The state after executing the code.
-        """        
-        # 不用流式的话很简单，就是调一下lang的step就行了
+    def step(self, language: str, code: str, stream: bool = False, display: bool = False) -> Any:
         state = EnvState(command=code)
-        lang = self.get_language(language)()  # 输入planner的节点类型即可
-        for output_line_dic in lang.step(code):
-            if output_line_dic['format'] == 'active_line' or output_line_dic['content'] in ['', '\n']:
-                continue
-            content = output_line_dic['content']
-            if 'Traceback' in content:
-                state.error = (state.error or '') + content
-            else:
-                state.result += content
-        if lang.name == 'Python':
-            lang.terminate()
-        # for output_line_dic in lang.step(code):
-        #     if output_line_dic['format'] == 'active_line':
-        #         continue
-        #     content = output_line_dic['content']
-        #     if content != '' and content != '\n':
-        #         if 'Traceback' in content:
-        #             state.error = (state.error or '') + content
-        #         else:
-        #             state.result += content
+        lang = self.get_language(language)
+        if not lang:
+            raise ValueError(f"Unsupported language: {language}")
+
+        if not stream:
+            st = lang.step(code)
+            state.result = st.result
+            state.error = st.error
+        else:
+            for chunk in self._streaming_run(language, code, display):
+                if chunk.get("format") == "active_line" or chunk.get("content") in ('', '\n'):
+                    continue
+                content = chunk["content"]
+                if "Traceback" in content:
+                    state.error += content
+                else:
+                    state.result += content
+            if lang.name == "Python":
+                lang.terminate()
+
         state.pwd = self.working_dir
-        state.ls = subprocess.run(['ls'], cwd=self.working_dir, capture_output=True, text=True).stdout
-        return state
-        
-        # if (
-        #     language == "python"
-        #     and self.computer.import_computer_api
-        #     and "computer" in code
-        # ):
-        #     if not self.computer._has_imported_computer_api:
-        #         self.computer._has_imported_computer_api = True
-        #         # Give it access to the computer via Python
-        #         self.computer.run(
-        #             language="python",
-        #             code="import time\nfrom interpreter import interpreter\ncomputer = interpreter.computer",  # We ask it to use time, so
-        #             display=self.computer.verbose,
-        #         )
-
-        if stream == False:
-            # If stream == False, *pull* from _streaming_run.
-            output_messages = []
-            for chunk in self._streaming_run(language, code, display=display):
-                if chunk.get("format") != "active_line":
-                    # Should we append this to the last message, or make a new one?
-                    if (
-                        output_messages != []
-                        and output_messages[-1].get("type") == chunk["type"]
-                        and output_messages[-1].get("format") == chunk["format"]
-                    ):
-                        output_messages[-1]["content"] += chunk["content"]
-                    else:
-                        output_messages.append(chunk)
-            return output_messages
-
-        elif stream == True:
-            # If stream == True, replace this with _streaming_run.
-            return self._streaming_run(language, code, display=display)
-
-    def _streaming_run(self, language, code, display=False):
-        """
-        Executes code in the specified language and streams the output.
-
-        Args:
-            language (str): The name or alias of the language to execute the code in.
-            code (str): The code to execute.
-            display (bool): Whether to display the output.
-
-        Yields:
-            dict: Output chunks generated during execution.
-        """        
-        if language not in self._active_languages:
-            # Get the language. Pass in self.computer *if it takes a single argument*
-            # but pass in nothing if not. This makes custom languages easier to add / understand.
-            lang_class = self.get_language(language)
-            if lang_class.__init__.__code__.co_argcount > 1:
-                self._active_languages[language] = lang_class(self.computer)
-            else:
-                self._active_languages[language] = lang_class()
         try:
-            for chunk in self._active_languages[language].run(code):
-                # self.format_to_recipient can format some messages as having a certain recipient.
-                # Here we add that to the LMC messages:
-                if chunk["type"] == "console" and chunk.get("format") == "output":
-                    recipient, content = parse_for_recipient(chunk["content"])
-                    if recipient:
-                        chunk["recipient"] = recipient
-                        chunk["content"] = content
+            state.ls = subprocess.run(
+                ["ls"], cwd=self.working_dir, capture_output=True, text=True
+            ).stdout
+        except:
+            state.ls = ""
 
-                    # Sometimes, we want to hide the traceback to preserve tokens.
-                    # (is this a good idea?)
-                    if "@@@HIDE_TRACEBACK@@@" in content:
-                        chunk["content"] = (
-                            "Stopping execution.\n\n"
-                            + content.split("@@@HIDE_TRACEBACK@@@")[-1].strip()
-                        )
+        return state
 
-                yield chunk
-
-                # Print it also if display = True
-                if (
-                    display
-                    and chunk.get("format") != "active_line"
-                    and chunk.get("content")
-                ):
-                    print(chunk["content"])
-
-        except GeneratorExit:
-            self.stop()
+    def _streaming_run(self, language: str, code: str, display: bool = False):
+        if language not in self._active:
+            self._active[language] = self.get_language(language)
+        lang = self._active[language]
+        for chunk in lang.run(code):
+            # 可在此解析 recipient
+            if display and chunk.get("format") != "active_line":
+                print(chunk.get("content", ""))
+            yield chunk
 
     def stop(self):
-        """
-        Stops the execution of all active languages.
-        """        
-        for language in self._active_languages.values():
-            language.stop()
+        for lang in self._active.values():
+            lang.stop()
 
     def terminate(self):
-        """
-        Terminates all active language environments.
-        """        
-        for language_name in list(self._active_languages.keys()):
-            language = self._active_languages[language_name]
-            if (
-                language
-            ):  # Not sure why this is None sometimes. We should look into this
-                language.terminate()
-            del self._active_languages[language_name]
+        for lang in self._active.values():
+            lang.terminate()
+        self._active.clear()
+
+# example
+if __name__ == "__main__":
+    env = Env()
+    st = env.step("Shell", "echo Hello from C++->Python refactor!", stream=False)
+    print("Result:", st.result)

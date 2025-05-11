@@ -1,81 +1,76 @@
 import re
 import json
-from oscopilot.utils import get_os_version
-
+from stratapilot.utils import get_os_version
 
 class BaseAgent:
     """
-    BaseAgent serves as the foundational class for all agents types within the system.
+    BaseAgent is the abstract superclass for all agent implementations in the system.
 
-    This class initializes the core attributes common across different agents, providing
-    a unified interface for further specialization. Attributes include a language learning
-    model, the execution environments, an action library, and a maximum iteration limit for
-    agents operations.
-
-    Attributes:
-        llm: Placeholder for a language learning model, initialized as None.
-        environments: The execution environments for the agents, initialized as None.
-        action_lib: A library of actions available to the agents, initialized as None.
-        max_iter: The maximum number of iterations the agents can perform, initialized as None.
+    It initializes and holds the common components shared by different agent types,
+    such as the system version, interfaces to language models, execution environments,
+    action libraries, and iteration limits.
     """
+
     def __init__(self):
         """
-        Initializes a new instance of BaseAgent with default values for its attributes.
+        Create a new BaseAgent instance and set up default attributes.
+
+        Currently, only the system version is initialized here. Subclasses may override
+        or extend this to configure additional properties.
         """
         self.system_version = get_os_version()
-        
-    def extract_information(self, message, begin_str='[BEGIN]', end_str='[END]'):
+
+    def extract_information(self, message: str, begin_str: str = '[BEGIN]', end_str: str = '[END]') -> list[str]:
         """
-        Extracts substrings from a message that are enclosed within specified begin and end markers.
+        Extract all substrings in `message` that lie between `begin_str` and `end_str`.
 
         Args:
-            message (str): The message from which information is to be extracted.
-            begin_str (str): The marker indicating the start of the information to be extracted.
-            end_str (str): The marker indicating the end of the information to be extracted.
+            message (str): The input text to search.
+            begin_str (str): The marker indicating the start of a segment (default "[BEGIN]").
+            end_str (str): The marker indicating the end of a segment (default "[END]").
 
         Returns:
-            list[str]: A list of extracted substrings found between the begin and end markers.
+            list[str]: A list of extracted substrings in the order they appear.
+                       Returns an empty list if no matching segments are found.
         """
-        result = []
-        _begin = message.find(begin_str)
-        _end = message.find(end_str)
-        while not (_begin == -1 or _end == -1):
-            result.append(message[_begin + len(begin_str):_end])
-            message = message[_end + len(end_str):]
-            _begin = message.find(begin_str)
-            _end = message.find(end_str)
-        return result  
+        results = []
+        remaining = message
+        while True:
+            start = remaining.find(begin_str)
+            end = remaining.find(end_str, start + len(begin_str))
+            if start == -1 or end == -1:
+                break
+            payload = remaining[start + len(begin_str):end]
+            results.append(payload)
+            remaining = remaining[end + len(end_str):]
+        return results
 
-    def extract_json_from_string(self, text):
+    def extract_json_from_string(self, text: str) -> dict | str:
         """
-        Identifies and extracts JSON data embedded within a given string.
+        Locate the first JSON block in `text` delimited by ```json ... ``` and parse it.
 
-        This method searches for JSON data within a string, specifically looking for
-        JSON blocks that are marked with ```json``` notation. It attempts to parse
-        and return the first JSON object found.
+        This method looks for a code-fenced JSON snippet of the form:
+
+            ```json
+            { ... }
+            ```
+
+        and attempts to convert it into a Python dictionary.
 
         Args:
-            text (str): The text containing the JSON data to be extracted.
+            text (str): The string potentially containing an embedded JSON block.
 
         Returns:
-            dict: The parsed JSON data as a dictionary if successful.
-            str: An error message indicating a parsing error or that no JSON data was found.
+            dict: The parsed JSON object if successful.
+            str: An error message if no JSON block is found or if parsing fails.
         """
-        # Improved regular expression to find JSON data within a string
-        json_regex = r'```json\s*\n\{[\s\S]*?\n\}\s*```'
-        
-        # Search for JSON data in the text
-        matches = re.findall(json_regex, text)
+        pattern = re.compile(r'```json\s*\n(\{[\s\S]*?\})\s*```')
+        match = pattern.search(text)
+        if not match:
+            return "No JSON block found in the input text."
+        json_str = match.group(1)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as err:
+            return f"JSON parsing error: {err}"
 
-        # Extract and parse the JSON data if found
-        if matches:
-            # Removing the ```json and ``` from the match to parse it as JSON
-            json_data = matches[0].replace('```json', '').replace('```', '').strip()
-            try:
-                # Parse the JSON data
-                parsed_json = json.loads(json_data)
-                return parsed_json
-            except json.JSONDecodeError as e:
-                return f"Error parsing JSON data: {e}"
-        else:
-            return "No JSON data found in the string."

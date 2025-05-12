@@ -1,47 +1,58 @@
 import pytest
-from oscopilot.utils import setup_config
-from oscopilot import FridayExecutor, ToolManager
-from oscopilot.prompts.friday_pt import prompt
+from stratapilot.utils import setup_config
+from stratapilot import FridayExecutor, ToolManager
+from stratapilot.prompts.friday_pt import prompt
 
 class TestExecutor:
     """
-    A test class for verifying the functionality of the FridayExecutor class.
-    
-    This class tests the code generation capabilities of the executor, particularly how it handles the creation
-    of tool invocations based on specified task requirements. The tests are designed to ensure the output from
-    the executor's methods is correctly formatted and non-empty.
-    """    
+    Unit tests for FridayExecutor's code generation methods.
+
+    Ensures that the executor can generate executable tool code and
+    invocation statements from task descriptions without producing empty output.
+    """
 
     def setup_method(self, method):
         """
-        Setup method executed before each test method in this class.
-        
-        This method initializes the FridayExecutor with a configuration and a predefined prompt for execution,
-        setting the stage for subsequent tests. This setup is crucial for ensuring that the executor is configured
-        properly with the necessary context and tool management capabilities before performing any tests.
+        Prepare a FridayExecutor instance before each test.
+
+        Initializes global configuration and creates an executor using the
+        predefined execution prompts and the ToolManager class.
 
         Args:
-            method: The test method that will be run after this setup method. This parameter isn't directly used
-                    but reflects the test framework's capability to pass the test method as an argument if needed.
-        """        
-        args = setup_config()
-        self.prompt = prompt["execute_prompt"]
+            method: Reference to the test method about to run (unused).
+        """
+        # Load environment configuration (e.g., API keys, paths)
+        setup_config()
+        # Retrieve execution prompts template
+        self.prompt = prompt['execute_prompt']
+        # Instantiate the executor with its prompts and tool manager
         self.executor = FridayExecutor(self.prompt, ToolManager)
 
-    def test_generator_tool(self):
+    def test_generate_tool(self):
         """
-        Test to ensure that the code generation by the FridayExecutor returns valid and non-empty outputs.
+        Verify that generate_tool returns non-empty code or invocation.
 
-        This test assesses the `generate_tool` method of the executor by providing it with a specific task name,
-        task description, and additional context (though empty in this case) to see if the resulting code and
-        invoke command are correctly populated and not empty. This is crucial for validating that the executor
-        can effectively translate task descriptions into actionable code snippets and commands.
-
+        Provides a sample task name, description, and empty context,
+        then asserts that at least one of the returned values is not empty.
         """
-        task_name, task_description, pre_tasks_info, relevant_code = "move_files", "Move any text file located in the working_dir/document directory that contains the word 'agent' to a new folder named 'agent' ", "", ""
-        code, invoke = self.executor.generate_tool(task_name, task_description, pre_tasks_info, relevant_code)
-        assert [code, invoke] != ['', '']
+        task_name = "move_files"
+        task_description = (
+            "Move any text file in 'working_dir/document' containing the word 'agent' "
+            "into a subfolder named 'agent'."
+        )
+        pre_tasks_info = ""
+        relevant_code = ""
 
-if __name__ == '__main__':
+        code, invoke = self.executor.generate_tool(
+            task_name,
+            task_description,
+            pre_tasks_info,
+            relevant_code
+        )
+
+        assert code or invoke, (
+            "Expected non-empty code or invoke command from generate_tool"
+        )
+
+if __name__ == "__main__":
     pytest.main()
-    

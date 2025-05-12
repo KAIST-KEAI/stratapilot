@@ -1,47 +1,45 @@
 import pytest
-from oscopilot.utils import setup_config
-from oscopilot import BasicPlanner, ToolManager
-from oscopilot.prompts.friday2_pt import prompt
+from stratapilot.utils import setup_config
+from stratapilot import BasicPlanner, ToolManager
+from stratapilot.prompts.friday2_pt import prompt
 
 class TestPlanner:
     """
-    A test class for verifying the functionality of the FridayPlanner class.
-    
-    This class focuses on testing the task decomposition capabilities of the planner, ensuring that tasks
-    can be broken down into subtasks effectively. It is crucial for validating that the planner properly
-    interprets and decomposes high-level tasks into actionable steps.
-    """    
+    Unit tests for the BasicPlanner’s task decomposition functionality.
+
+    Verifies that high-level task descriptions are properly split into actionable subtasks,
+    ensuring the planner’s core capability for breaking down complex tasks.
+    """
+
     def setup_method(self, method):
         """
-        Setup method executed before each test method in this class.
-        
-        This method prepares the FridayPlanner instance by configuring it with necessary settings and a predefined
-        planning prompt, ensuring that the planner is ready to handle task decomposition.
+        Called before each test to configure the planner instance.
+
+        Initializes configuration settings and creates a BasicPlanner using the
+        predefined planning prompt.
 
         Args:
-            method: The test method that will be run after this setup method. While this parameter is not used
-                    directly in the setup, it is included to comply with the expected signature for setup methods
-                    in the testing framework.
-        """        
-        args = setup_config()
-        self.prompt = prompt["planning_prompt"]
+            method: Reference to the test method about to run (unused).
+        """
+        # Initialize global configuration for the planner
+        setup_config()
+        # Load the planning prompt template
+        self.prompt = prompt['planning_prompt']
+        # Create a planner instance with the loaded prompt
         self.planner = BasicPlanner(self.prompt)
 
-    def test_decompose_task(self):
+    def test_decompose_task_generates_subtasks(self):
         """
-        Test to verify that the task decomposition process in the FridayPlanner does not result in an empty subtask list.
+        Ensure that decomposing a sample task yields at least one subtask.
 
-        This test checks the functionality of the `decompose_task` method by providing a specific task description
-        and ensuring that the planner is capable of breaking it down into one or more subtasks. An empty list of
-        subtasks would indicate a failure in the decomposition process, which is critical for the planner's utility
-        in real-world applications.
+        Given a descriptive task string, the planner should populate its
+        sub_task_list with non-empty entries. An empty list indicates a failure
+        to break down the task.
+        """
+        example_task = "Analyze user behavior data to identify the top three features."
+        self.planner.decompose_task(example_task)
+        assert self.planner.sub_task_list, \
+            "Expected sub_task_list to be non-empty after decomposing the task."
 
-        """        
-        task = ""
-        self.planner.decompose_task(task)
-        assert self.planner.sub_task_list != []
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     pytest.main()
-    
-    

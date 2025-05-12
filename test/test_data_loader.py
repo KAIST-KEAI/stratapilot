@@ -1,56 +1,61 @@
 import pytest
-from oscopilot.utils import SheetTaskLoader, get_project_root_path
+from stratapilot.utils import SheetTaskLoader, get_project_root_path
 
 class TestSheetTaskLoader:
     """
-    A test class for verifying the functionality of the SheetTaskLoader class.
-    
-    This class includes methods to set up test conditions, and test various functionalities such as converting
-    tasks to queries, loading the dataset of sheet tasks, and retrieving specific tasks by ID.
+    Unit tests for the SheetTaskLoader class.
+
+    Verifies that tasks can be converted into query strings, datasets are loaded correctly,
+    and specific task entries can be retrieved by their ID.
     """
-    
+
     def setup_method(self, method):
         """
-        Setup method executed before each test method in this class.
-        
-        This method prepares a SheetTaskLoader instance using a predetermined path to the sheet tasks JSONL file,
-        effectively setting the environment for subsequent tests.
+        Configure a SheetTaskLoader instance before each test.
+
+        Constructs the loader using a sample JSONL file path.
 
         Args:
-            method: The test method that will be run after this setup method. This parameter isn't directly used
-                    but reflects the test framework's capability to pass the test method as an argument if needed.
+            method: Reference to the upcoming test method (unused).
         """
-        sheet_task_path = get_project_root_path() + "examples/SheetCopilot/sheet_task.jsonl"
+        sheet_task_path = (
+            get_project_root_path() + "/examples/SheetCopilot/sheet_task.jsonl"
+        )
         self.sheet_task_loader = SheetTaskLoader(sheet_task_path)
 
     def test_task2query(self):
         """
-        Test to ensure that converting a task to a query does not return an empty string.
+        Ensure that task2query produces a non-empty query string.
 
-        This test calls the `task2query` method of the SheetTaskLoader with mock parameters and checks if the result
-        is not an empty string, indicating that the method is functioning correctly and producing output.
-        """        
-        assert self.sheet_task_loader.task2query("context.", "instructions.", "file_path") != ""
-
+        Calls task2query with example parameters and asserts
+        the returned string is not empty.
+        """
+        query = self.sheet_task_loader.task2query(
+            context="some context.",
+            instructions="do something.",
+            file_path="dummy/path.xlsx"
+        )
+        assert query != "", "Expected non-empty query string from task2query"
 
     def test_load_sheet_task_dataset(self):
         """
-        Test to ensure that loading the sheet task dataset does not return an empty list.
+        Verify that the dataset loader returns a non-empty list.
 
-        This test verifies that the `load_sheet_task_dataset` method is capable of loading data and the result is
-        a non-empty list, suggesting that the dataset contains entries.
+        Calls load_sheet_task_dataset and asserts
+        the returned list contains at least one entry.
         """
-        assert self.sheet_task_loader.load_sheet_task_dataset() != []
+        dataset = self.sheet_task_loader.load_sheet_task_dataset()
+        assert dataset, "Expected non-empty list from load_sheet_task_dataset"
 
     def test_get_task_by_id(self):
         """
-        Test to ensure that retrieving a task by its ID does not return an empty dictionary.
+        Confirm that get_data_by_task_id returns valid data for a given ID.
 
-        This test confirms that the `get_data_by_task_id` method returns a dictionary with content when queried with
-        a valid task ID, which in this case, is presumed to be 1.
-        """        
-        assert self.sheet_task_loader.get_data_by_task_id(1) != {}
+        Retrieves task ID 1 and asserts
+        the result is a non-empty dictionary.
+        """
+        task_data = self.sheet_task_loader.get_data_by_task_id(1)
+        assert task_data, "Expected non-empty dict from get_data_by_task_id for ID 1"
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     pytest.main()
-

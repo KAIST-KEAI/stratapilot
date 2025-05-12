@@ -5,67 +5,113 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path='.env', override=True)
 API_BASE_URL = os.getenv('API_BASE_URL') 
 
+import requests
+from some_config_module import API_BASE_URL
+
+
 class ToolRequestUtil:
     """
-    A utility class for making HTTP requests to an API.
+    Simplifies making HTTP requests to external APIs with session management and configurable headers.
 
-    This class simplifies the process of sending HTTP requests using a persistent session
-    and predefined headers, including a User-Agent header to mimic a browser request. It's
-    designed to interact with APIs by sending GET or POST requests and handling file uploads.
+    This utility wraps a persistent `requests.Session` to send GET or POST requests,
+    including JSON payloads and multipart file uploads. It automatically prepends a base URL
+    to each endpoint path and applies standard headers (e.g., User-Agent) for compatibility.
 
     Attributes:
-        session (requests.Session): A requests session for making HTTP requests.
-        headers (dict): Default headers to be sent with each request.
-        base_url (str): The base URL for the API endpoints.
+        session (requests.Session): Reusable HTTP session for connection pooling.
+        headers (dict): Default headers sent with every request.
+        base_url (str): Root URL prepended to all API paths.
     """
+
     def __init__(self):
         """
-        Initializes the ToolRequestUtil with a session and default request headers.
+        Initialize the HTTP session and default request settings.
         """
-        self.session = requests.session()
-        self.headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_4) AppleWebKit/537.36 (KHTML like Gecko) Chrome/52.0.2743.116 Safari/537.36'}
+        self.session = requests.Session()
+        self.headers = {
+            'User-Agent': (
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_4) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) '
+                'Chrome/52.0.2743.116 Safari/537.36'
+            )
+        }
         self.base_url = API_BASE_URL
 
-    def request(self, api_path, method, params=None, files=None, content_type="application/json"):
+    def request(
+        self,
+        api_path: str,
+        method: str,
+        params: dict = None,
+        files: dict = None,
+        content_type: str = "application/json"
+    ) -> dict | None:
         """
-        Sends a request to the specified API endpoint using the defined HTTP method.
+        Send an HTTP request to a specific API endpoint and return its JSON response.
 
-        This method constructs the request URL from the base URL and the API path. It supports
-        both GET and POST methods, including handling of JSON parameters, file uploads, and
-        different content types.
+        Constructs the full URL by joining `base_url` with `api_path`, then issues
+        either a GET or POST request using the given parameters or file attachments.
 
         Args:
-            api_path (str): The path of the API endpoint.
-            method (str): The HTTP method to use for the request ('get' or 'post').
-            params (dict, optional): The parameters to include in the request. Defaults to None.
-            files (dict, optional): Files to be uploaded in a POST request. Defaults to None.
-            content_type (str, optional): The content type of the request, such as
-                'application/json' or 'multipart/form-data'. Defaults to "application/json".
+            api_path (str): Endpoint path, appended to the base URL.
+            method (str): HTTP method to use ('get' or 'post').
+            params (dict, optional): Request parameters or JSON body.
+            files (dict, optional): Files for multipart/form-data POST requests.
+            content_type (str, optional): MIME type header (e.g., 'application/json',
+                'multipart/form-data'). Defaults to 'application/json'.
 
         Returns:
-            dict: The JSON response from the API, or None if an error occurs.
-
-        Raises:
-            Prints an error message to the console if an HTTP request error occurs.
+            dict: Parsed JSON response on success.
+            None: If the method is unsupported or an exception occurs.
         """
-        url = self.base_url + api_path
+        url = f"{self.base_url}{api_path}"
         try:
-            if method.lower() == "get":
+            method_lower = method.lower()
+            if method_lower == "get":
                 if content_type == "application/json":
-                    result = self.session.get(url=url, json=params, headers=self.headers, timeout=60).json()
-                else: 
-                    result = self.session.get(url=url, params=params, headers=self.headers, timeout=60).json()
-            elif method.lower() == "post":
-                if content_type == "multipart/form-data":
-                    result = self.session.post(url=url, files=files, data=params, headers=self.headers).json()
-                elif content_type == "application/json":
-                    result = self.session.post(url=url, json=params, headers=self.headers).json()
+                    response = self.session.get(
+                        url,
+                        json=params,
+                        headers=self.headers,
+                        timeout=60
+                    )
                 else:
-                    result = self.session.post(url=url, data=params, headers=self.headers).json()
+                    response = self.session.get(
+                        url,
+                        params=params,
+                        headers=self.headers,
+                        timeout=60
+                    )
+
+            elif method_lower == "post":
+                if content_type == "multipart/form-data":
+                    response = self.session.post(
+                        url,
+                        files=files,
+                        data=params,
+                        headers=self.headers,
+                        timeout=60
+                    )
+                elif content_type == "application/json":
+                    response = self.session.post(
+                        url,
+                        json=params,
+                        headers=self.headers,
+                        timeout=60
+                    )
+                else:
+                    response = self.session.post(
+                        url,
+                        data=params,
+                        headers=self.headers,
+                        timeout=60
+                    )
+
             else:
-                print("request method error!")
+                print("Error: Unsupported HTTP method")
                 return None
-            return result
+
+            return response.json()
+
         except Exception as e:
-            print("http request error: %s" % e)
+            print(f"HTTP request error: {e}")
             return None

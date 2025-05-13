@@ -1,6 +1,6 @@
-from oscopilot import FridayAgent, ToolManager
-from oscopilot import FridayExecutor, FridayPlanner, FridayRetriever
-from oscopilot.utils import setup_config, setup_pre_run
+from strata import FridayAgent, ToolManager
+from strata import FridayExecutor, FridayPlanner, FridayRetriever
+from strata.utils import setup_config, setup_pre_run
 
 
 def main():

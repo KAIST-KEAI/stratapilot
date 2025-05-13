@@ -1,8 +1,8 @@
-from oscopilot.tool_repository.manager.action_node import ActionNode
+from strata.tool_repository.manager.action_node import ActionNode
 from collections import defaultdict, deque
-from oscopilot.modules.base_module import BaseModule
-from oscopilot.tool_repository.manager.tool_manager import get_open_api_description_pair
-from oscopilot.utils.utils import send_chat_prompts, api_exception_mechanism
+from strata.modules.base_module import BaseModule
+from strata.tool_repository.manager.tool_manager import get_open_api_description_pair
+from strata.utils.utils import send_chat_prompts, api_exception_mechanism
 import json
 import sys
 import logging

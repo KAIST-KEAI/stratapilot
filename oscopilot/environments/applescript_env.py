@@ -4,7 +4,7 @@ Original concept from Open Interpreter: https://github.com/OpenInterpreter/open-
 """
 
 import os
-from oscopilot.environments import SubprocessEnv
+from strata.environments import SubprocessEnv
 
 class AppleScript(SubprocessEnv):
     """Execution environment for AppleScript with line tracking and robust completion detection."""

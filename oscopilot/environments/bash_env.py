@@ -6,7 +6,7 @@ Original concept: https://github.com/OpenInterpreter/open-interpreter
 import os
 import platform
 import re
-from oscopilot.environments import SubprocessEnv
+from strata.environments import SubprocessEnv
 
 class Shell(SubprocessEnv):
     """A shell environment for executing shell scripts with execution tracking."""

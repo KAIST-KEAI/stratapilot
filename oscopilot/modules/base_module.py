@@ -1,11 +1,11 @@
 import re
 import json
 import os
-from oscopilot.utils.llms import OpenAI, OLLAMA
-# from oscopilot.environments.py_env import PythonEnv
-# from oscopilot.environments.py_jupyter_env import PythonJupyterEnv
-from oscopilot.environments import Env
-from oscopilot.utils import get_os_version
+from strata.utils.llms import OpenAI, OLLAMA
+# from strata.environments.py_env import PythonEnv
+# from strata.environments.py_jupyter_env import PythonJupyterEnv
+from strata.environments import Env
+from strata.utils import get_os_version
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path='.env', override=True)

@@ -1,4 +1,4 @@
-name: oscopilot
+name: strata
 channels:
   - defaults
 dependencies:

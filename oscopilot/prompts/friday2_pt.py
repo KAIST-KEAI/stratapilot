@@ -271,7 +271,7 @@ prompt = {
         Please begin your code completion:
         ''',
         '_USER_TOOL_USAGE_PROMPT': '''
-        from oscopilot.tool_repository.manager.tool_request_util import ToolRequestUtil
+        from strata.tool_repository.manager.tool_request_util import ToolRequestUtil
         tool_request_util = ToolRequestUtil()
         # TODO: your code here
         ''',

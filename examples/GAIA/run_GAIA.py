@@ -1,8 +1,8 @@
 import json
 import requests
-from oscopilot import FridayAgent
-from oscopilot import FridayExecutor, FridayPlanner, FridayRetriever, ToolManager
-from oscopilot.utils import setup_config, GAIALoader, GAIA_postprocess
+from strata import FridayAgent
+from strata import FridayExecutor, FridayPlanner, FridayRetriever, ToolManager
+from strata.utils import setup_config, GAIALoader, GAIA_postprocess
 
 
 def evaluate_results(path):

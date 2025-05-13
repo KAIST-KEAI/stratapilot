@@ -1,5 +1,5 @@
-from oscopilot.modules.base_module import BaseModule
-from oscopilot.utils.utils import send_chat_prompts
+from strata.modules.base_module import BaseModule
+from strata.utils.utils import send_chat_prompts
 import logging
 
 

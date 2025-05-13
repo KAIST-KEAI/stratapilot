@@ -1,5 +1,5 @@
-from oscopilot import FridayAgent, FridayExecutor, FridayPlanner, FridayRetriever, SelfLearner, SelfLearning, ToolManager, TextExtractor
-from oscopilot.utils import setup_config
+from strata import FridayAgent, FridayExecutor, FridayPlanner, FridayRetriever, SelfLearner, SelfLearning, ToolManager, TextExtractor
+from strata.utils import setup_config
 
 
 args = setup_config()

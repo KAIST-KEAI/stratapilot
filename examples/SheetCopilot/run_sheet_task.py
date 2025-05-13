@@ -1,6 +1,6 @@
-from oscopilot import FridayAgent
-from oscopilot import FridayExecutor, FridayPlanner, FridayRetriever, ToolManager
-from oscopilot.utils import setup_config, SheetTaskLoader
+from strata import FridayAgent
+from strata import FridayExecutor, FridayPlanner, FridayRetriever, ToolManager
+from strata.utils import setup_config, SheetTaskLoader
 
 
 def run_agent_on_task(agent, task, task_id=None):

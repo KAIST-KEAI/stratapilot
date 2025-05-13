@@ -14,8 +14,8 @@ from datasets import load_dataset
 from functools import wraps
 from bs4 import BeautifulSoup
 
-from oscopilot.prompts.general_pt import prompt as general_pt
-from oscopilot.utils.llms import OpenAI
+from strata.prompts.general_pt import prompt as general_pt
+from strata.utils.llms import OpenAI
 import platform
 
 def save_json(file_path: str, new_json_content: Dict[str, Any] | List[Any]) -> None:
@@ -292,7 +292,7 @@ def send_chat_prompts(sys_prompt: str, user_prompt: str, llm: OpenAI, prefix: st
 def get_project_root_path() -> str:
     """
     Returns the absolute path of the project root directory.
-    Assumes this function is located in oscopilot/utils/.
+    Assumes this function is located in strata/utils/.
 
     Returns:
         str: Project root path with trailing slash.

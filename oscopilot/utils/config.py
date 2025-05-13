@@ -4,7 +4,7 @@ import argparse
 import logging
 from typing import Any, Dict, Optional
 from pathlib import Path
-from oscopilot.utils.utils import random_string, get_project_root_path
+from strata.utils.utils import random_string, get_project_root_path
 import dotenv
 
 # Load environment variables from .env file, overriding existing environment variables
@@ -77,7 +77,7 @@ def setup_config() -> argparse.Namespace:
     general.add_argument(
         '--generated_tool_repo_path', 
         type=str, 
-        default='oscopilot/tool_repository/generated_tools',
+        default='strata/tool_repository/generated_tools',
         help='Path to store generated tool artifacts'
     )
     general.add_argument(

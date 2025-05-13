@@ -1,7 +1,7 @@
 import os
-from oscopilot.utils.config import Config
+from strata.utils.config import Config
 from typing import Optional, Union, List
-from oscopilot.utils.schema import EnvState
+from strata.utils.schema import EnvState
 
 
 class BaseEnv:

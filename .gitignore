@@ -73,7 +73,7 @@ db.sqlite3
 db.sqlite3-journal
 
 # generated tools stuff:
-oscopilot/tool_repository/generated_tools/
+strata/tool_repository/generated_tools/
 
 
 # Example stuff:

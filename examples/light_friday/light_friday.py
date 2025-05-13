@@ -5,8 +5,8 @@ import re
 import dotenv
 from rich.console import Console
 from rich.markdown import Markdown
-from oscopilot.utils import setup_config, setup_pre_run
-from oscopilot.modules.base_module import BaseModule
+from strata.utils import setup_config, setup_pre_run
+from strata.modules.base_module import BaseModule
 
 # Load environment variables
 dotenv.load_dotenv(dotenv_path='.env', override=True)

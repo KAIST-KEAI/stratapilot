@@ -8,301 +8,222 @@ import sys
 import logging
 
 
-class FridayPlanner(BaseModule):
+class HelixPlanner(BaseModule):
     """
-    A planning module responsible for decomposing complex tasks into manageable subtasks, replanning tasks based on new insights or failures, and managing the execution order of tasks. 
+    The HelixPlanner orchestrates high-level task breakdown, adaptation,
+    and dependency resolution across a directed toolchain workflow.
+    """
 
-    The `FridayPlanner` uses a combination of tool descriptions, environmental state, and language learning models to dynamically create and adjust plans for task execution. It maintains a tool graph to manage task dependencies and execution order, ensuring that tasks are executed in a sequence that respects their interdependencies.
-    """
-    def __init__(self, prompt):
+    def __init__(self, config):
         super().__init__()
-        self.tool_num = 0
-        self.tool_node = {}
-        self.prompt = prompt
-        self.tool_graph = defaultdict(list)
-        self.sub_task_list = []
+        self.task_total = 0
+        self.node_map = {}
+        self.config = config
+        self.dependency_graph = defaultdict(list)
+        self.execution_queue = []
 
-    def reset_plan(self):
+    def clear_state(self):
         """
-        Resets the tool graph and subtask list to their initial states.
+        Reinitializes the task graph and execution structures.
         """
-        self.tool_num = 0
-        self.tool_node = {}
-        self.tool_graph = defaultdict(list)
-        self.sub_task_list = []
+        self.task_total = 0
+        self.node_map.clear()
+        self.dependency_graph.clear()
+        self.execution_queue.clear()
 
     @api_exception_mechanism(max_retries=3)
-    def decompose_task(self, task, tool_description_pair):
+    def break_down_goal(self, goal, tool_catalog):
         """
-        Decomposes a complex task into manageable subtasks and updates the tool graph.
-
-        This method takes a high-level task and an tool-description pair, and utilizes
-        the environments's current state to format and send a decomposition request to the
-        language learning model. It then parses the response to construct and update the
-        tool graph with the decomposed subtasks, followed by a topological sort to
-        determine the execution order.
+        Breaks a user objective into discrete actionable components.
 
         Args:
-            task (str): The complex task to be decomposed.
-            tool_description_pair (dict): A dictionary mapping tool names to their descriptions.
+            goal (str): The high-level objective to deconstruct.
+            tool_catalog (dict): Tool name-description mapping.
 
         Side Effects:
-            Updates the tool graph with the decomposed subtasks and reorders tools based on
-            dependencies through topological sorting.
+            Updates internal dependency graph and reorders tasks.
         """
-        files_and_folders = self.environment.list_working_dir()
-        tool_description_pair = json.dumps(tool_description_pair)
-        api_list = get_open_api_description_pair()
-        sys_prompt = self.prompt['_SYSTEM_TASK_DECOMPOSE_PROMPT']
-        user_prompt = self.prompt['_USER_TASK_DECOMPOSE_PROMPT'].format(
+        tool_data = json.dumps(tool_catalog)
+        fs_snapshot = self.environment.list_working_dir()
+        external_apis = get_open_api_description_pair()
+
+        sys_prompt = self.config['_SYSTEM_TASK_DECOMPOSE_PROMPT']
+        user_prompt = self.config['_USER_TASK_DECOMPOSE_PROMPT'].format(
             system_version=self.system_version,
-            task=task,
-            tool_list = tool_description_pair,
-            api_list = api_list,
-            working_dir = self.environment.working_dir,
-            files_and_folders = files_and_folders
+            task=goal,
+            tool_list=tool_data,
+            api_list=external_apis,
+            working_dir=self.environment.working_dir,
+            files_and_folders=fs_snapshot
         )
-        response = send_chat_prompts(sys_prompt, user_prompt, self.llm, prefix="Overall")
-        decompose_json = self.extract_json_from_string(response)
-        # Building tool graph and topological ordering of tools
-        if decompose_json != 'No JSON data found in the string.':
-            self.create_tool_graph(decompose_json)
-            self.topological_sort()
+
+        result = send_chat_prompts(sys_prompt, user_prompt, self.llm, prefix="Overall")
+        parsed_data = self.extract_json_from_string(result)
+
+        if parsed_data != 'No JSON data found in the string.':
+            self._build_graph(parsed_data)
+            self._resolve_order()
         else:
-            print(response)
-            print('No JSON data found in the string.')
+            print(result)
+            print('No structured data retrieved.')
             sys.exit()
 
-    def replan_task(self, reasoning, current_task, relevant_tool_description_pair):
+    def revise_execution_path(self, reason, active_task, tools_meta):
         """
-        Replans the current task by integrating new tools into the original tool graph.
-
-        Given the reasoning for replanning and the current task, this method generates a new
-        tool plan incorporating any relevant tools. It formats a replanning request, sends
-        it to the language learning model, and integrates the response (new tools) into the
-        existing tool graph. The graph is then updated to reflect the new dependencies and
-        re-sorted topologically.
+        Alters existing plan using newly provided resources or knowledge.
 
         Args:
-            reasoning (str): The reasoning or justification for replanning the task.
-            current_task (str): The identifier of the current task being replanned.
-            relevant_tool_description_pair (dict): A dictionary mapping relevant tool names to
-                                                    their descriptions for replanning.
+            reason (str): Motivation or explanation for adjustment.
+            active_task (str): Name of the node being reassessed.
+            tools_meta (dict): Tool name-description JSON payload.
 
         Side Effects:
-            Modifies the tool graph to include new tools and updates the execution order
-            of tools within the graph.
+            Integrates new nodes and triggers reordering of tasks.
         """
-        # current_task information
-        current_tool = self.tool_node[current_task]
-        current_task_description = current_tool.description
-        relevant_tool_description_pair = json.dumps(relevant_tool_description_pair)
-        files_and_folders = self.environment.list_working_dir()
-        sys_prompt = self.prompt['_SYSTEM_TASK_REPLAN_PROMPT']
-        user_prompt = self.prompt['_USER_TASK_REPLAN_PROMPT'].format(
-            current_task = current_task,
-            current_task_description = current_task_description,
+        ref_node = self.node_map[active_task]
+        serialized_tools = json.dumps(tools_meta)
+        dir_snapshot = self.environment.list_working_dir()
+
+        sys_prompt = self.config['_SYSTEM_TASK_REPLAN_PROMPT']
+        user_prompt = self.config['_USER_TASK_REPLAN_PROMPT'].format(
+            current_task=active_task,
+            current_task_description=ref_node.description,
             system_version=self.system_version,
-            reasoning = reasoning,
-            tool_list = relevant_tool_description_pair,
-            working_dir = self.environment.working_dir,
-            files_and_folders = files_and_folders
+            reasoning=reason,
+            tool_list=serialized_tools,
+            working_dir=self.environment.working_dir,
+            files_and_folders=dir_snapshot
         )
-        response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
-        new_tool = self.extract_json_from_string(response)
-        # add new tool to tool graph
-        self.add_new_tool(new_tool, current_task)
-        # update topological sort
-        self.topological_sort()
 
-    def update_tool(self, tool, return_val='', relevant_code=None, status=False, node_type='Code'):
+        feedback = send_chat_prompts(sys_prompt, user_prompt, self.llm)
+        patch_nodes = self.extract_json_from_string(feedback)
+
+        self._insert_task_node(patch_nodes, active_task)
+        self._resolve_order()
+
+    def patch_tool_info(self, node_id, output='', code=None, done=False, category='Code'):
         """
-        Updates the specified tool's node information within the tool graph.
-
-        This method allows updating an tool's return value, relevant code, execution status,
-        and node_type. It is particularly useful for modifying tools' details after their execution
-        or during the replanning phase.
+        Edits an existing node's post-execution details.
 
         Args:
-            tool (str): The tool identifier whose details are to be updated.
-            return_val (str, optional): The return value of the tool. Default is an empty string.
-            relevant_code (str, optional): Any relevant code associated with the tool. Default is None.
-            status (bool, optional): The execution status of the tool. Default is False.
-            node_type (str, optional): The node_type of the tool (e.g., 'Code'). Default is 'Code'.
-
-        Side Effects:
-            Updates the information of the specified tool node within the tool graph.
+            node_id (str): ID of the tool node.
+            output (str): Return value (if any).
+            code (str): Related script fragment.
+            done (bool): Execution status.
+            category (str): Classification of node type.
         """
-        if return_val:
-            if node_type=='Code':
-                return_val = self.extract_information(return_val, "<return>", "</return>")
-                print("************************<return>**************************")
-                logging.info(return_val)
-                print(return_val)
-                print("************************</return>*************************")  
-            if return_val != 'None':
-                self.tool_node[tool]._return_val = return_val
-        if relevant_code:
-            self.tool_node[tool]._relevant_code = relevant_code
-        self.tool_node[tool]._status = status
+        if output and category == 'Code':
+            output = self.extract_information(output, "<return>", "</return>")
+            logging.info(output)
+            print("======= Extracted Output =======")
+            print(output)
+            print("================================")
+            if output != 'None':
+                self.node_map[node_id]._return_val = output
 
-    def get_tool_list(self, relevant_tool=None):
+        if code:
+            self.node_map[node_id]._relevant_code = code
+
+        self.node_map[node_id]._status = done
+
+    def retrieve_available_tools(self, filter_set=None):
         """
-        Retrieves a list of all tools or a subset of relevant tools, including their names and descriptions.
-
-        This method fetches tool descriptions from the tool library. If a specific set of relevant tools
-        is provided, it filters the list to include only those tools. The resulting list (or the full list if
-        no relevant tools are specified) is then returned in JSON format.
+        Outputs JSON-formatted tool descriptions.
 
         Args:
-            relevant_tool (list, optional): A list of tool names to filter the returned tools by.
-                                            If None, all tools are included. Defaults to None.
+            filter_set (list): Specific tool IDs to filter by.
 
         Returns:
-            A JSON string representing a dictionary of tool names to their descriptions. 
-            The dictionary includes either all tools from the library or only those specified as relevant.
+            str: JSON object of tools.
         """
-        tool_dict = self.tool_manager.descriptions
-        if not relevant_tool:
-            return json.dumps(tool_dict)
-        relevant_tool_dict = {tool : description for tool ,description in tool_dict.items() if tool in relevant_tool}
-        relevant_tool_list = json.dumps(relevant_tool_dict)
-        return relevant_tool_list
-    
-    def create_tool_graph(self, decompose_json):
-        """
-        Constructs an tool graph based on dependencies specified in the given JSON.
+        full_set = self.tool_manager.descriptions
+        if not filter_set:
+            return json.dumps(full_set)
 
-        This method takes a JSON object containing task information and dependencies,
-        and constructs an tool graph. Each task is added as a node in the graph, with
-        directed edges representing task dependencies. The method updates the class's
-        internal structures to reflect this graph, including tool nodes and their
-        relationships, as well as the overall number of tools.
+        subset = {k: v for k, v in full_set.items() if k in filter_set}
+        return json.dumps(subset)
+
+    def _build_graph(self, structure):
+        """
+        Assembles a dependency map using task metadata.
 
         Args:
-            decompose_json (dict): A JSON object where each key is an tool name, and the value
-                                is a dictionary containing the tool's name, description,
-                                type, and dependencies.
-
-        Side Effects:
-            Modifies the internal state by updating `tool_num`, `tool_node`, and `tool_graph`
-            to reflect the newly created tool graph.
+            structure (dict): JSON describing tool chain.
         """
-        for task_name, task_info in decompose_json.items():
-            self.tool_num += 1
-            task_description = task_info['description']
-            task_type = task_info['type']
-            task_dependencies = task_info['dependencies']
-            self.tool_node[task_name] = ActionNode(task_name, task_description, task_type)
-            self.tool_graph[task_name] = task_dependencies
-            for pre_tool in self.tool_graph[task_name]:
-                self.tool_node[pre_tool].next_action[task_name] = task_description
-    
-    def add_new_tool(self, new_task_json, current_task):
-        """
-        Incorporates a new tool into the existing tool graph based on its dependencies.
+        for label, props in structure.items():
+            self.task_total += 1
+            self.node_map[label] = ActionNode(label, props['description'], props['type'])
+            self.dependency_graph[label] = props['dependencies']
+            for dep in props['dependencies']:
+                self.node_map[dep].next_action[label] = props['description']
 
-        This method processes a JSON object representing a new task, including its name,
-        description, type, and dependencies, and adds it to the tool graph. It also updates
-        the tool nodes to reflect this new addition. Finally, it appends the last new task
-        to the list of dependencies for the specified current task.
+    def _insert_task_node(self, patch_data, parent_task):
+        """
+        Adds a node and links it to an existing task chain.
 
         Args:
-            new_task_json (dict): A JSON object containing the new task's details.
-            current_task (str): The name of the current task to which the new task's dependencies will be added.
+            patch_data (dict): New task JSON.
+            parent_task (str): Task receiving the addition.
+        """
+        for label, content in patch_data.items():
+            self.task_total += 1
+            self.node_map[label] = ActionNode(label, content['description'], content['type'])
+            self.dependency_graph[label] = content['dependencies']
+            for d in content['dependencies']:
+                self.node_map[d].next_action[label] = content['description']
+        final_label = list(patch_data.keys())[-1]
+        self.dependency_graph[parent_task].append(final_label)
+
+    def _resolve_order(self):
+        """
+        Performs topological sorting of tasks with dependency constraints.
 
         Side Effects:
-            Updates the tool graph and nodes to include the new tool and its dependencies.
-            Modifies the dependencies of the current task to include the new tool.
+            Updates `execution_queue` with sorted task sequence.
         """
-        for task_name, task_info in new_task_json.items():
-            self.tool_num += 1
-            task_description = task_info['description']
-            task_type = task_info['type']
-            task_dependencies = task_info['dependencies']
-            self.tool_node[task_name] = ActionNode(task_name, task_description, task_type)
-            self.tool_graph[task_name] = task_dependencies
-            for pre_tool in self.tool_graph[task_name]:
-                self.tool_node[pre_tool].next_action[task_name] = task_description           
-        last_new_task = list(new_task_json.keys())[-1]
-        self.tool_graph[current_task].append(last_new_task)
+        self.execution_queue.clear()
+        dag = defaultdict(list)
 
-    def topological_sort(self):
-        """
-        Generates a topological sort of the tool graph to determine the execution order.
+        for node, parents in self.dependency_graph.items():
+            if not self.node_map[node].status:
+                dag.setdefault(node, [])
+                for p in parents:
+                    if not self.node_map[p].status:
+                        dag[p].append(node)
 
-        This method applies a topological sorting algorithm to the current tool graph, 
-        considering the status of each tool. It aims to identify an order in which tools
-        can be executed based on their dependencies, ensuring that all prerequisites are met
-        before an tool is executed. The sorting algorithm accounts for tools that have not
-        yet been executed to avoid cycles and ensure a valid execution order.
+        in_deg = {n: 0 for n in dag}
+        for n in dag:
+            for ch in dag[n]:
+                in_deg[ch] += 1
 
-        Side Effects:
-            Populates `sub_task_list` with the sorted order of tools to be executed if a 
-            topological sort is possible. Otherwise, it indicates a cycle detection.
-        """
-        self.sub_task_list = []
-        graph = defaultdict(list)
-        for node, dependencies in self.tool_graph.items():
-            # If the current node has not been executed, put it in the dependency graph.
-            if not self.tool_node[node].status:
-                graph.setdefault(node, [])
-                for dependent in dependencies:
-                    # If the dependencies of the current node have not been executed, put them in the dependency graph.
-                    if not self.tool_node[dependent].status:
-                        graph[dependent].append(node)
+        q = deque([n for n, deg in in_deg.items() if deg == 0])
+        while q:
+            curr = q.popleft()
+            self.execution_queue.append(curr)
+            for nxt in dag[curr]:
+                in_deg[nxt] -= 1
+                if in_deg[nxt] == 0:
+                    q.append(nxt)
 
-        in_degree = {node: 0 for node in graph}      
-        # Count in-degree for each node
-        for node in graph:
-            for dependent in graph[node]:
-                in_degree[dependent] += 1
-
-        # Initialize queue with nodes having in-degree 0
-        queue = deque([node for node in in_degree if in_degree[node] == 0])
-
-        # List to store the order of execution
-
-        while queue:
-            # Get one node with in-degree 0
-            current = queue.popleft()
-            self.sub_task_list.append(current)
-
-            # Decrease in-degree for all nodes dependent on current
-            for dependent in graph[current]:
-                in_degree[dependent] -= 1
-                if in_degree[dependent] == 0:
-                    queue.append(dependent)
-
-        # Check if topological sort is possible (i.e., no cycle)
-        if len(self.sub_task_list) == len(graph):
-            print("topological sort is possible")
+        if len(self.execution_queue) == len(dag):
+            print("Topological ordering established.")
         else:
-            return "Cycle detected in the graph, topological sort not possible."
-        
-    def get_pre_tasks_info(self, current_task):
-        """
-        Retrieves information about the prerequisite tasks for a given current task.
+            return "Cycle detected: sort failed."
 
-        This method collects and formats details about all tasks that are prerequisites
-        for the specified current task. It extracts descriptions and return values for
-        each prerequisite task and compiles this information into a JSON string.
+    def summarize_dependencies(self, task_id):
+        """
+        Compiles upstream info for a given task node.
 
         Args:
-            current_task (str): The name of the task for which prerequisite information is requested.
+            task_id (str): Node ID.
 
         Returns:
-            A JSON string representing a dictionary, where each key is a prerequisite task's
-            name, and the value is a dictionary with the task's description and return value.
+            str: JSON summary of prerequisite nodes.
         """
-        pre_tasks_info = {}
-        for task in self.tool_graph[current_task]:
-            task_info = {
-                "description" : self.tool_node[task].description,
-                "return_val" : self.tool_node[task].return_val
+        summary = {}
+        for dep in self.dependency_graph[task_id]:
+            summary[dep] = {
+                "description": self.node_map[dep].description,
+                "return_val": self.node_map[dep].return_val
             }
-            pre_tasks_info[task] = task_info
-        pre_tasks_info = json.dumps(pre_tasks_info)
-        return pre_tasks_info
-
-
+        return json.dumps(summary)

@@ -8,231 +8,165 @@ import sys
 import logging
 
 
-class BasicPlanner(BaseModule):
+class TaskOrchestrator(BaseModule):
     """
-    A planning module responsible for decomposing complex tasks into manageable subtasks, replanning tasks based on new insights or failures, and managing the execution order of tasks. 
+    Handles strategic planning for breaking down and adapting multi-step tasks,
+    modifying plans in response to context changes, and organizing execution flow.
+    """
 
-    The `BasicPlanner` uses a combination of tool descriptions, environmental state, and language learning models to dynamically create and adjust plans for task execution. It maintains a tool list to manage task dependencies and execution order, ensuring that tasks are executed in a sequence that respects their interdependencies.
-    """
-    def __init__(self, prompt):
+    def __init__(self, configuration):
         super().__init__()
-        self.subtask_num = 0
-        self.prompt = prompt
-        self.global_messages = []
-        self.sub_task_list = []
+        self.task_counter = 0
+        self.config = configuration
+        self.history_logs = []
+        self.pending_tasks = []
 
-    def reset_plan(self):
-        """
-        Resets global messages and subtask list to their initial states.
-        """
-        self.subtask_num = 0
-        self.global_messages = []
-        self.sub_task_list = []
+    def clear_plan_state(self):
+        """Reset state containers for task management."""
+        self.task_counter = 0
+        self.history_logs.clear()
+        self.pending_tasks.clear()
 
-    def decompose_task(self, task):
+    def segment_task(self, objective):
         """
-        Decomposes a complex task into manageable subtasks.
-
-        This method takes a high-level task and utilizes the environments's current state
-        to format and send a decomposition request to the language learning model. It then 
-        parses the response to construct and update the tool list with the decomposed subtasks.
+        Fragment a broad instruction into executable segments.
 
         Args:
-            task (str): The complex task to be decomposed.
-
+            objective (str): The complex task requiring segmentation.
         """
-        sys_prompt = self.prompt['_SYSTEM_TASK_DECOMPOSE_PROMPT']
-        user_prompt = self.prompt['_USER_TASK_DECOMPOSE_PROMPT'].format(
+        sys_prompt = self.config['_SYSTEM_TASK_DECOMPOSE_PROMPT']
+        user_prompt = self.config['_USER_TASK_DECOMPOSE_PROMPT'].format(
             system_version=self.system_version,
-            task=task,
+            task=objective,
             working_dir=self.environment.working_dir
         )
-        response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
-        print(response)
-        task_list = self.extract_list_from_string(response)
-        self.sub_task_list = task_list
-        self.subtask_num = len(task_list)
+        reply = send_chat_prompts(sys_prompt, user_prompt, self.llm)
+        print(reply)
+        fragments = self.extract_list_from_string(reply)
+        self.pending_tasks = fragments
+        self.task_counter = len(fragments)
 
-
-    def replan_task(self, reasoning, current_task, relevant_tool_description_pair):
+    def revise_plan(self, rationale, target_task, tool_info_map):
         """
-        Replans the current task by integrating new tools into the original tool graph.
-
-        Given the reasoning for replanning and the current task, this method generates a new
-        tool plan incorporating any relevant tools. It formats a replanning request, sends
-        it to the language learning model, and integrates the response (new tools) into the
-        existing tool graph. The graph is then updated to reflect the new dependencies and
-        re-sorted topologically.
+        Reconstructs a portion of the plan incorporating additional resources.
 
         Args:
-            reasoning (str): The reasoning or justification for replanning the task.
-            current_task (str): The identifier of the current task being replanned.
-            relevant_tool_description_pair (dict): A dictionary mapping relevant tool names to
-                                                    their descriptions for replanning.
-
-        Side Effects:
-            Modifies the tool graph to include new tools and updates the execution order
-            of tools within the graph.
+            rationale (str): Reason for triggering plan revision.
+            target_task (str): Task to be updated in the execution graph.
+            tool_info_map (dict): Tool data relevant for adaptation.
         """
-        # current_task information
-        current_tool = self.tool_node[current_task]
-        current_task_description = current_tool.description
-        relevant_tool_description_pair = json.dumps(relevant_tool_description_pair)
-        files_and_folders = self.environment.list_working_dir()
-        sys_prompt = self.prompt['_SYSTEM_TASK_REPLAN_PROMPT']
-        user_prompt = self.prompt['_USER_TASK_REPLAN_PROMPT'].format(
-            current_task = current_task,
-            current_task_description = current_task_description,
+        task_obj = self.tool_node[target_task]
+        task_details = task_obj.description
+        serialized_tools = json.dumps(tool_info_map)
+        directory_listing = self.environment.list_working_dir()
+
+        sys_prompt = self.config['_SYSTEM_TASK_REPLAN_PROMPT']
+        user_prompt = self.config['_USER_TASK_REPLAN_PROMPT'].format(
+            current_task=target_task,
+            current_task_description=task_details,
             system_version=self.system_version,
-            reasoning = reasoning,
-            tool_list = relevant_tool_description_pair,
-            working_dir = self.environment.working_dir,
-            files_and_folders = files_and_folders
+            reasoning=rationale,
+            tool_list=serialized_tools,
+            working_dir=self.environment.working_dir,
+            files_and_folders=directory_listing
         )
-        response = send_chat_prompts(sys_prompt, user_prompt, self.llm)
-        new_tool = self.extract_json_from_string(response)
-        # add new tool to tool graph
-        self.add_new_tool(new_tool, current_task)
-        # update topological sort
+        feedback = send_chat_prompts(sys_prompt, user_prompt, self.llm)
+        parsed_update = self.extract_json_from_string(feedback)
+        self.integrate_new_tool(parsed_update, target_task)
         self.topological_sort()
 
-    def update_tool(self, tool, return_val='', relevant_code=None, status=False, node_type='Code'):
+    def amend_tool_node(self, identifier, outcome='', script_block=None, executed=False, category='Code'):
         """
-        Updates the specified tool's node information within the tool graph.
-
-        This method allows updating an tool's return value, relevant code, execution status,
-        and node_type. It is particularly useful for modifying tools' details after their execution
-        or during the replanning phase.
+        Modifies metadata for a specified tool node.
 
         Args:
-            tool (str): The tool identifier whose details are to be updated.
-            return_val (str, optional): The return value of the tool. Default is an empty string.
-            relevant_code (str, optional): Any relevant code associated with the tool. Default is None.
-            status (bool, optional): The execution status of the tool. Default is False.
-            node_type (str, optional): The node_type of the tool (e.g., 'Code'). Default is 'Code'.
-
-        Side Effects:
-            Updates the information of the specified tool node within the tool graph.
+            identifier (str): Unique ID of the node.
+            outcome (str): Result value after execution.
+            script_block (str): Associated logic or command string.
+            executed (bool): Whether the tool has been executed.
+            category (str): Tool classification type.
         """
-        if return_val:
-            if node_type=='Code':
-                return_val = self.extract_information(return_val, "<return>", "</return>")
-                print("************************<return>**************************")
-                logging.info(return_val)
-                print(return_val)
-                print("************************</return>*************************")  
-            if return_val != 'None':
-                self.tool_node[tool]._return_val = return_val
-        if relevant_code:
-            self.tool_node[tool]._relevant_code = relevant_code
-        self.tool_node[tool]._status = status
+        if outcome and category == 'Code':
+            extracted = self.extract_information(outcome, "<return>", "</return>")
+            logging.info(extracted)
+            print("======== Extracted Output ========")
+            print(extracted)
+            print("==================================")
+            if extracted != 'None':
+                self.tool_node[identifier]._return_val = extracted
+        if script_block:
+            self.tool_node[identifier]._relevant_code = script_block
+        self.tool_node[identifier]._status = executed
 
-    def get_tool_list(self, relevant_tool=None):
+    def fetch_tool_catalog(self, filter_list=None):
         """
-        Retrieves a list of all tools or a subset of relevant tools, including their names and descriptions.
-
-        This method fetches tool descriptions from the tool library. If a specific set of relevant tools
-        is provided, it filters the list to include only those tools. The resulting list (or the full list if
-        no relevant tools are specified) is then returned in JSON format.
+        Returns JSON-formatted metadata of tools.
 
         Args:
-            relevant_tool (list, optional): A list of tool names to filter the returned tools by.
-                                            If None, all tools are included. Defaults to None.
+            filter_list (list, optional): If provided, limits output to specific tools.
 
         Returns:
-            A JSON string representing a dictionary of tool names to their descriptions. 
-            The dictionary includes either all tools from the library or only those specified as relevant.
+            str: JSON string containing descriptions.
         """
-        tool_dict = self.tool_manager.descriptions
-        if not relevant_tool:
-            return json.dumps(tool_dict)
-        relevant_tool_dict = {tool : description for tool ,description in tool_dict.items() if tool in relevant_tool}
-        relevant_tool_list = json.dumps(relevant_tool_dict)
-        return relevant_tool_list
-    
-    def create_tool_graph(self, decompose_json):
-        """
-        Constructs an tool graph based on dependencies specified in the given JSON.
+        all_tools = self.tool_manager.descriptions
+        if not filter_list:
+            return json.dumps(all_tools)
+        selected = {k: v for k, v in all_tools.items() if k in filter_list}
+        return json.dumps(selected)
 
-        This method takes a JSON object containing task information and dependencies,
-        and constructs an tool graph. Each task is added as a node in the graph, with
-        directed edges representing task dependencies. The method updates the class's
-        internal structures to reflect this graph, including tool nodes and their
-        relationships, as well as the overall number of tools.
+    def initialize_task_graph(self, graph_spec):
+        """
+        Builds a directed graph from task metadata.
 
         Args:
-            decompose_json (dict): A JSON object where each key is an tool name, and the value
-                                is a dictionary containing the tool's name, description,
-                                type, and dependencies.
-
-        Side Effects:
-            Modifies the internal state by updating `tool_num`, `tool_node`, and `tool_graph`
-            to reflect the newly created tool graph.
+            graph_spec (dict): Task definitions and dependencies.
         """
-        for _, task_info in decompose_json.items():
+        for _, node in graph_spec.items():
             self.tool_num += 1
-            task_name = task_info['name']
-            task_description = task_info['description']
-            task_type = task_info['type']
-            task_dependencies = task_info['dependencies']
-            self.tool_node[task_name] = ActionNode(task_name, task_description, task_type)
-            self.tool_graph[task_name] = task_dependencies
-            for pre_tool in self.tool_graph[task_name]:
-                self.tool_node[pre_tool].next_action[task_name] = task_description
-    
-    def add_new_tool(self, new_task_json, current_task):
-        """
-        Incorporates a new tool into the existing tool graph based on its dependencies.
+            name = node['name']
+            desc = node['description']
+            kind = node['type']
+            deps = node['dependencies']
+            self.tool_node[name] = ActionNode(name, desc, kind)
+            self.tool_graph[name] = deps
+            for dep in deps:
+                self.tool_node[dep].next_action[name] = desc
 
-        This method processes a JSON object representing a new task, including its name,
-        description, type, and dependencies, and adds it to the tool graph. It also updates
-        the tool nodes to reflect this new addition. Finally, it appends the last new task
-        to the list of dependencies for the specified current task.
+    def integrate_new_tool(self, tool_payload, anchor_task):
+        """
+        Merges a new task into the plan graph.
 
         Args:
-            new_task_json (dict): A JSON object containing the new task's details.
-            current_task (str): The name of the current task to which the new task's dependencies will be added.
-
-        Side Effects:
-            Updates the tool graph and nodes to include the new tool and its dependencies.
-            Modifies the dependencies of the current task to include the new tool.
+            tool_payload (dict): The JSON blueprint of the tool node.
+            anchor_task (str): Task that this new node builds upon.
         """
-        for _, task_info in new_task_json.items():
+        for _, entry in tool_payload.items():
             self.tool_num += 1
-            task_name = task_info['name']
-            task_description = task_info['description']
-            task_type = task_info['type']
-            task_dependencies = task_info['dependencies']
-            self.tool_node[task_name] = ActionNode(task_name, task_description, task_type)
-            self.tool_graph[task_name] = task_dependencies
-            for pre_tool in self.tool_graph[task_name]:
-                self.tool_node[pre_tool].next_action[task_name] = task_description           
-        last_new_task = list(new_task_json.keys())[-1]
-        self.tool_graph[current_task].append(last_new_task)
-        
-    def get_pre_tasks_info(self, current_task):
-        """
-        Retrieves information about the prerequisite tasks for a given current task.
+            node_name = entry['name']
+            node_desc = entry['description']
+            node_type = entry['type']
+            node_links = entry['dependencies']
+            self.tool_node[node_name] = ActionNode(node_name, node_desc, node_type)
+            self.tool_graph[node_name] = node_links
+            for upstream in node_links:
+                self.tool_node[upstream].next_action[node_name] = node_desc
+        last_key = list(tool_payload.keys())[-1]
+        self.tool_graph[anchor_task].append(last_key)
 
-        This method collects and formats details about all tasks that are prerequisites
-        for the specified current task. It extracts descriptions and return values for
-        each prerequisite task and compiles this information into a JSON string.
+    def summarize_dependencies(self, focus_task):
+        """
+        Compiles data from prerequisite tasks.
 
         Args:
-            current_task (str): The name of the task for which prerequisite information is requested.
+            focus_task (str): Task whose inputs are being summarized.
 
         Returns:
-            A JSON string representing a dictionary, where each key is a prerequisite task's
-            name, and the value is a dictionary with the task's description and return value.
+            str: JSON-encoded dependency information.
         """
-        pre_tasks_info = {}
-        for task in self.tool_graph[current_task]:
-            task_info = {
-                "description" : self.tool_node[task].description,
-                "return_val" : self.tool_node[task].return_val
+        input_map = {}
+        for dep in self.tool_graph[focus_task]:
+            input_map[dep] = {
+                "description": self.tool_node[dep].description,
+                "return_val": self.tool_node[dep].return_val
             }
-            pre_tasks_info[task] = task_info
-        pre_tasks_info = json.dumps(pre_tasks_info)
-        return pre_tasks_info
-
-
+        return json.dumps(input_map)

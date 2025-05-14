@@ -1,110 +1,94 @@
 import re
 import json
 import os
+from dotenv import load_dotenv
 from strata.utils.llms import OpenAI, OLLAMA
-# from strata.environments.py_env import PythonEnv
-# from strata.environments.py_jupyter_env import PythonJupyterEnv
 from strata.environments import Env
 from strata.utils import get_os_version
-from dotenv import load_dotenv
 
+# Load environment config
 load_dotenv(dotenv_path='.env', override=True)
-MODEL_TYPE = os.getenv('MODEL_TYPE')
+SELECTED_MODEL = os.getenv('MODEL_TYPE')
 
-class BaseModule:
+class KernelBase:
+    """
+    Base component providing model binding and utility extraction methods
+    for processing structured content such as lists and JSON blocks.
+    """
+
     def __init__(self):
         """
-        Initializes a new instance of BaseModule with default values for its attributes.
+        Initializes core runtime settings, including LLM and OS environment bindings.
         """
-        if MODEL_TYPE == "OpenAI":
+        self.llm = None
+        if SELECTED_MODEL == "OpenAI":
             self.llm = OpenAI()
-        elif MODEL_TYPE == "OLLAMA":
+        elif SELECTED_MODEL == "OLLAMA":
             self.llm = OLLAMA()
-        # self.environment = PythonEnv()
-        # self.environment = PythonJupyterEnv()
+
         self.environment = Env()
         self.system_version = get_os_version()
-        
-    def extract_information(self, message, begin_str='[BEGIN]', end_str='[END]'):
+
+    def find_delimited_segments(self, text, start_tag='[BEGIN]', end_tag='[END]'):
         """
-        Extracts substrings from a message that are enclosed within specified begin and end markers.
+        Extracts substrings enclosed by user-defined markers.
 
         Args:
-            message (str): The message from which information is to be extracted.
-            begin_str (str): The marker indicating the start of the information to be extracted.
-            end_str (str): The marker indicating the end of the information to be extracted.
+            text (str): Source input containing embedded sections.
+            start_tag (str): Marker for the beginning of extraction.
+            end_tag (str): Marker for the end of extraction.
 
         Returns:
-            list[str]: A list of extracted substrings found between the begin and end markers.
+            list[str]: All substrings found between specified boundaries.
         """
-        result = []
-        _begin = message.find(begin_str)
-        _end = message.find(end_str)
-        while not (_begin == -1 or _end == -1):
-            result.append(message[_begin + len(begin_str):_end].lstrip("\n"))
-            message = message[_end + len(end_str):]
-            _begin = message.find(begin_str)
-            _end = message.find(end_str)
-        return result  
+        results = []
+        start = text.find(start_tag)
+        end = text.find(end_tag)
+        while start != -1 and end != -1:
+            segment = text[start + len(start_tag):end].lstrip("\n")
+            results.append(segment)
+            text = text[end + len(end_tag):]
+            start = text.find(start_tag)
+            end = text.find(end_tag)
+        return results
 
-    def extract_json_from_string(self, text):
+    def parse_json_block(self, source_text):
         """
-        Identifies and extracts JSON data embedded within a given string.
+        Scans input for JSON fragments and attempts to decode them.
 
-        This method searches for JSON data within a string, specifically looking for
-        JSON blocks that are marked with ```json``` notation. It attempts to parse
-        and return the first JSON object found.
+        Looks for JSON enclosed in markdown-style ```json blocks, returning
+        the parsed dictionary if possible.
 
         Args:
-            text (str): The text containing the JSON data to be extracted.
+            source_text (str): The raw text possibly containing JSON.
 
         Returns:
-            dict: The parsed JSON data as a dictionary if successful.
-            str: An error message indicating a parsing error or that no JSON data was found.
+            dict or str: Parsed object or error message.
         """
-        # Improved regular expression to find JSON data within a string
-        json_regex = r'```json\n\s*\{\n\s*[\s\S\n]*\}\n\s*```'
-        
-        # Search for JSON data in the text
-        matches = re.findall(json_regex, text)
+        pattern = r'```json\n\s*\{\n\s*[\s\S\n]*\}\n\s*```'
+        matches = re.findall(pattern, source_text)
 
-        # Extract and parse the JSON data if found
         if matches:
-            # Removing the ```json and ``` from the match to parse it as JSON
-            json_data = matches[0].replace('```json', '').replace('```', '').strip()
+            snippet = matches[0].replace('```json', '').replace('```', '').strip()
             try:
-                # Parse the JSON data
-                parsed_json = json.loads(json_data)
-                return parsed_json
+                return json.loads(snippet)
             except json.JSONDecodeError as e:
-                return f"Error parsing JSON data: {e}"
+                return f"JSON decoding failed: {e}"
         else:
-            return "No JSON data found in the string."
-        
+            return "No structured JSON found."
 
-    def extract_list_from_string(self, text):
+    def extract_bulleted_items(self, raw_text):
         """
-        Extracts a list of task descriptions from a given string containing enumerated tasks.
-        This function ensures that only text immediately following a numbered bullet is captured,
-        and it stops at the first newline character or at the next number, preventing the inclusion of subsequent non-numbered lines or empty lines.
+        Retrieves task content from numerically ordered lines.
 
-        Parameters:
-        text (str): A string containing multiple enumerated tasks. Each task is numbered and followed by its description.
+        This function isolates descriptions that immediately follow
+        a numeric bullet and stops at next number or break.
+
+        Args:
+            raw_text (str): Input text containing task-style lines.
 
         Returns:
-        list[str]: A list of strings, each representing the description of a task extracted from the input string.
+            list[str]: Extracted task descriptions.
         """
-
-        # Regular expression pattern:
-        # \d+\. matches one or more digits followed by a dot, indicating the task number.
-        # \s+ matches one or more whitespace characters after the dot.
-        # ([^\n]*?) captures any sequence of characters except newlines (non-greedy) as the task description.
-        # (?=\n\d+\.|\n\Z|\n\n) is a positive lookahead that matches a position followed by either a newline with digits and a dot (indicating the start of the next task),
-        # or the end of the string, or two consecutive newlines (indicating a break between tasks or end of content).
-        task_pattern = r'\d+\.\s+([^\n]*?)(?=\n\d+\.|\n\Z|\n\n)'
-
-        # Use the re.findall function to search for all matches of the pattern in the input text.
-        data_list = re.findall(task_pattern, text)
-
-        # Return the list of matched task descriptions.
-        return data_list
+        pattern = r'\d+\.\s+([^\n]*?)(?=\n\d+\.|\n\Z|\n\n)'
+        return re.findall(pattern, raw_text)

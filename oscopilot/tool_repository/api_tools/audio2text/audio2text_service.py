@@ -1,31 +1,31 @@
-from fastapi import APIRouter, HTTPException, File, UploadFile,Depends
-from pydantic import BaseModel,Field
+from fastapi import APIRouter, UploadFile, HTTPException, File, Depends
+from pydantic import BaseModel, Field
 from typing import Optional
 from .audio2text import Audio2TextTool
-import io
+import tempfile
 import os
-import shutil
-router = APIRouter()
 
-whisper_api = Audio2TextTool()
+api = APIRouter()
 
+speech_decoder = Audio2TextTool()
 
-class AudioTextQueryItem(BaseModel):
-    file: UploadFile = File(...)
+class InputAudioPayload(BaseModel):
+    audio_clip: UploadFile = File(...)
 
-
-
-@router.post("/tools/audio2text", summary="A tool that converts audio to natural language text.")
-async def audio2text(item: AudioTextQueryItem = Depends()):
+@api.post("/tools/audio2text", summary="Transcribes spoken audio into readable sentences.")
+async def transcribe_audio(data: InputAudioPayload = Depends()):
     try:
-        # Create a temporary file to save the uploaded audio.
-        with open(item.file.filename, "wb") as buffer:
-            shutil.copyfileobj(item.file.file, buffer)
-        with open(item.file.filename, "rb") as audio:
-            caption = whisper_api.caption(audio_file=audio)
-        # Clean up temporary files.
-        os.remove(item.file.filename)
-        return {"text": caption}
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Save incoming audio to a temporary location
+        temp_dir = tempfile.gettempdir()
+        tmp_path = os.path.join(temp_dir, data.audio_clip.filename)
+        with open(tmp_path, "wb") as tmp_file:
+            tmp_file.write(await data.audio_clip.read())
 
+        # Generate transcription from the saved file
+        with open(tmp_path, "rb") as source_audio:
+            output_text = speech_decoder.caption(audio_file=source_audio)
+
+        os.remove(tmp_path)  # Remove the file after processing
+        return {"text": output_text}
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=str(err))

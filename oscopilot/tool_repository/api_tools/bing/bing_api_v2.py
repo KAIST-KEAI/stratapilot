@@ -10,112 +10,100 @@ from langchain.vectorstores import Chroma
 from langchain.chains.summarize import load_summarize_chain
 from langchain import OpenAI
 
-SEARCH_RESULT_LIST_CHUNK_SIZE = 3
-RESULT_TARGET_PAGE_PER_TEXT_COUNT = 500
+# Constants for controlling output behavior
+_SNIPPET_BATCH = 3
+_MAX_TEXT_UNIT = 500
 
-
-class BingAPIV2:
+class SmartWebSearchAgent:
     """
-    A class for interacting with the Bing Search API and performing subsequent processing on web page data.
+    Interface for executing Bing-powered queries, gathering and processing content from webpages.
 
-    This class encapsulates the functionality to perform web searches using Bing's API, load web pages,
-    chunk and embed text for analysis, summarize web pages, and attend to loaded pages based on specific queries.
-
-    Attributes:
-        search_engine (BingSearchAPIWrapper): Configured instance for executing searches with Bing's API.
-        web_loader (WebPageLoader): Utility for loading web page content.
-        web_chunker (RecursiveCharacterTextSplitter): Utility for splitting text into manageable chunks.
-        web_sniptter_embed (OpenAIEmbeddings): Embedding model for text chunks.
-        web_summarizer (OpenAI): Model for summarizing web page content.
+    Responsibilities include performing safe queries, loading and segmenting HTML content,
+    transforming chunks into vectors, and summarizing or attending to context.
     """
-    def __init__(self) -> None:
-        """
-        Initializes the BingAPIV2 with components for search, web page loading, and text processing.
-        """
-        self.search_engine = BingSearchAPIWrapper(search_kwargs={'mkt': 'en-us','safeSearch': 'moderate'})
-        self.web_loader = WebPageLoader()
-        self.web_chunker = RecursiveCharacterTextSplitter(chunk_size=4500, chunk_overlap=0)
-        self.web_sniptter_embed = OpenAIEmbeddings()
-        self.web_summarizer = OpenAI(
-            temperature=0,
-            )
 
-    def search(self, key_words: str,top_k: int = 5, max_retry: int = 3):
+    def __init__(self):
         """
-        Searches for web pages using Bing's API based on provided keywords.
+        Setup search utility, page content retrieval, segmentation engine, vectorizer, and summarizer.
+        """
+        self._engine = BingSearchAPIWrapper(search_kwargs={'mkt': 'en-us', 'safeSearch': 'moderate'})
+        self._reader = WebPageLoader()
+        self._segmenter = RecursiveCharacterTextSplitter(chunk_size=4500, chunk_overlap=0)
+        self._encoder = OpenAIEmbeddings()
+        self._summarizer = OpenAI(temperature=0)
 
-        Attempts the search up to a specified number of retries upon failure.
+    def query_web(self, prompt: str, count: int = 5, retries: int = 3):
+        """
+        Run a search request through Bing and fetch top URLs.
 
         Args:
-            key_words (str): The keywords to search for.
-            top_k (int, optional): The number of search results to return. Defaults to 5.
-            max_retry (int, optional): The maximum number of retry attempts. Defaults to 3.
+            prompt (str): The phrase or term to search.
+            count (int): Desired number of top links. Defaults to 5.
+            retries (int): Times to retry on failure. Defaults to 3.
 
         Returns:
-            list: A list of search results.
+            list: Search result metadata.
 
         Raises:
-            RuntimeError: If the search attempts fail after reaching the maximum number of retries.
+            RuntimeError: If no results are fetched within retry attempts.
         """
-        for _ in range(max_retry):
+        for _ in range(retries):
             try:
-                result = self.search_engine.results(key_words,top_k)
+                hits = self._engine.results(prompt, count)
+                if hits:
+                    return hits
             except Exception:
                 continue
-            if result != None:
-                return result
-            else:
-                continue
-        raise RuntimeError("Failed to access Bing Search API.")
+        raise RuntimeError("Unable to connect to Bing and fetch results.")
 
-    def load_page(self, url: str) -> str:
+    def fetch_site_content(self, link: str) -> str:
         """
-        Loads the content of a web page given its URL.
+        Download and parse content from a web address.
 
         Args:
-            url (str): The URL of the web page to load.
+            link (str): Target URL to extract textual data from.
 
         Returns:
-            str: The content of the web page as a string.
+            str: Flattened text content if successful; otherwise, an empty string.
         """
-        page_data = self.web_loader.load_data(url)
-        page_content_str = ""
-        if(page_data["data"][0] != None and page_data["data"][0]["content"] != None):
-            page_content_str = page_data["data"][0]["content"]
-        return page_content_str
-    def summarize_loaded_page(self,page_str):
+        payload = self._reader.load_data(link)
+        doc_text = ""
+        if payload.get("data") and payload["data"][0].get("content"):
+            doc_text = payload["data"][0]["content"]
+        return doc_text
+
+    def generate_summary(self, full_text: str) -> str:
         """
-        Summarizes the content of a loaded web page.
+        Produce a high-level synopsis of a web page’s contents.
 
         Args:
-            page_str (str): The content of the web page to summarize.
+            full_text (str): Entire webpage data as string.
 
         Returns:
-            str: The summarized content of the web page.
+            str: Condensed version of the input.
         """
-        if page_str == "":
+        if not full_text:
             return ""
-        web_chunks = self.web_chunker.create_documents([page_str])
-        summarize_chain = load_summarize_chain(self.web_summarizer, chain_type="map_reduce")
-        main_web_content = summarize_chain.run(web_chunks)
-        return main_web_content
-    def attended_loaded_page(self,page_str,query_str):
+        segments = self._segmenter.create_documents([full_text])
+        reduction_pipeline = load_summarize_chain(self._summarizer, chain_type="map_reduce")
+        abstract = reduction_pipeline.run(segments)
+        return abstract
+
+    def extract_relevant_passages(self, full_text: str, question: str) -> str:
         """
-        Identifies and aggregates content from a loaded web page that is most relevant to a given query.
+        Pull information most pertinent to the input query from a web document.
 
         Args:
-            page_str (str): The content of the web page.
-            query_str (str): The query string to identify relevant content.
+            full_text (str): Raw data from a site.
+            question (str): User-defined prompt to filter content relevance.
 
         Returns:
-            str: The aggregated content from the web page that is most relevant to the query.
+            str: Combined snippets matching the topic of interest.
         """
-        if page_str == "":
+        if not full_text:
             return ""
-        web_chunks = self.web_chunker.create_documents([page_str])
-        chunSearch = Chroma.from_documents(web_chunks, self.web_sniptter_embed)
-        relatedChunks = chunSearch.similarity_search(query_str, k=3)
-        attended_content = '...'.join([chunk.page_content for chunk in relatedChunks])
-        return attended_content
-
-
+        segments = self._segmenter.create_documents([full_text])
+        vector_index = Chroma.from_documents(segments, self._encoder)
+        top_matches = vector_index.similarity_search(question, k=3)
+        focused_context = '...'.join([item.page_content for item in top_matches])
+        return focused_context

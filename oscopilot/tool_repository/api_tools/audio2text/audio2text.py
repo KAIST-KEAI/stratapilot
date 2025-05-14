@@ -1,12 +1,13 @@
 from openai import OpenAI
 
-class Audio2TextTool:
+class SpeechToTextEngine:
     def __init__(self) -> None:
-        self.client = OpenAI()
-    def caption(self,audio_file):
-        # Perform voice recognition using the OpenAI Whisper API
-        response = self.client.audio.transcriptions.create(
+        self._agent = OpenAI()
+
+    def transcribe_audio(self, media_stream):
+        # Use Whisper model to convert spoken audio into textual output
+        result = self._agent.audio.transcriptions.create(
             model="whisper-1",
-            file=audio_file
+            file=media_stream
         )
-        return response.texts
+        return result.texts

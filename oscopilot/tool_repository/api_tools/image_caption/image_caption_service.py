@@ -1,37 +1,43 @@
-from fastapi import APIRouter, HTTPException,UploadFile,File,Form, Depends
-from pydantic import BaseModel,Field
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from pydantic import BaseModel, Field
 from typing import Optional
-from .gpt4v_caption import ImageCaptionTool
+from .gpt4v_caption import VisualInsightGenerator
 import base64
 
 router = APIRouter()
 
-image_caption_api = ImageCaptionTool()
+vision_tool = VisualInsightGenerator()
 
+async def extract_caption_args(
+    task_prompt: Optional[str] = Form("Can you interpret this image?"),
+    remote_url: Optional[str] = Form(None),
+    uploaded_img: Optional[UploadFile] = File(None)
+):
+    return {"task_prompt": task_prompt, "remote_url": remote_url, "uploaded_img": uploaded_img}
 
-# class CaptionQueryItem(BaseModel):
-#     query: Optional[str] = "What's in this image?"
-#     url: Optional[str] = None
-#     image_file: Optional[UploadFile] = File(None)
-
-async def caption_parameters(query: Optional[str] = Form("What's in this image?"),url: Optional[str] = Form(None),image_file: Optional[UploadFile] = File(None)):
-    return {"query":query,"url":url,"image_file":image_file}
-
-@router.post("/tools/image_caption", summary="When the task is to question and answer based on local picture, you have to use the Image Caption tool, who can directly analyze picture to answer question and complete task. For local images you want to understand, you need to only give the image_file without url. It is crucial to provide the 'query' parameter, and its value must be the full content of the task itself.")
-async def image_search(item: dict = Depends(caption_parameters)):
+@router.post(
+    "/tools/visual_inspector",
+    summary="Use this utility for interpreting a visual file or URL using GPT-4 Vision. It accepts either a local image (uploaded) or a remote link, alongside a user-defined task prompt. The prompt should express the full context of the task to ensure accurate interpretation."
+)
+async def analyze_image(input_data: dict = Depends(extract_caption_args)):
     try:
-        if(item["query"] == None):
-            item["query"] = "What's in this image?"
-        if(item["url"] == None and item["image_file"] == None):
-            return {"error":"Invalid picture"}
-        image_url=""
-        if(item["url"] != None and item["image_file"] == None):
-            image_url = item["url"]
-        elif(item["image_file"] != None):
-            base64Img = base64.b64encode(await item["image_file"].read()).decode('utf-8')
-            image_url = f"data:image/jpeg;base64,{base64Img}"
-        caption = image_caption_api.caption(url=image_url,query=item["query"])
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    return {"caption":caption}
+        if input_data["task_prompt"] is None:
+            input_data["task_prompt"] = "Can you interpret this image?"
 
+        if input_data["remote_url"] is None and input_data["uploaded_img"] is None:
+            return {"error": "No valid image input provided."}
+
+        visual_reference = ""
+
+        if input_data["remote_url"] and not input_data["uploaded_img"]:
+            visual_reference = input_data["remote_url"]
+        elif input_data["uploaded_img"]:
+            encoded_img = base64.b64encode(await input_data["uploaded_img"].read()).decode("utf-8")
+            visual_reference = f"data:image/jpeg;base64,{encoded_img}"
+
+        result = vision_tool.describe_image(image_url=visual_reference, prompt=input_data["task_prompt"])
+
+    except RuntimeError as err:
+        raise HTTPException(status_code=500, detail=str(err))
+
+    return {"caption": result}

@@ -1,21 +1,23 @@
 import requests
 import json
 
-# API endpoint
-url = "http://43.159.144.130:8079/tools/wolframalpha"
+# Target endpoint for mathematical reasoning tool
+endpoint = "http://43.159.144.130:8079/tools/wolframalpha"
 
-# Headers
-headers = {
-    'Content-Type': 'application/json'
+# Prepare request headers
+req_headers = {
+    "Content-Type": "application/json"
 }
 
-# Data
-data = {
+# Define the task payload
+payload = {
     "query": "5+6"
 }
 
-# Send the request
-response = requests.post(url, headers=headers, data=json.dumps(data))
-
-# Print the response
-print(response.json())
+# Execute POST request
+try:
+    result = requests.post(endpoint, headers=req_headers, data=json.dumps(payload))
+    result.raise_for_status()
+    print(result.json())
+except Exception as err:
+    print(f"Request failed: {err}")

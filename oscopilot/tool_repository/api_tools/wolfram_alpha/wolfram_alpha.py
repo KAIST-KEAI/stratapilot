@@ -1,31 +1,33 @@
 from fastapi import APIRouter
-import wolframalpha
 from pydantic import BaseModel
 from typing import Optional
+import wolframalpha
 import os
 from dotenv import load_dotenv
 
-
-load_dotenv(dotenv_path='.env', override=True)
-
-WOLFRAMALPHA_APP_ID = os.getenv('WOLFRAMALPHA_APP_ID')
-
-class QueryItem(BaseModel):
-    query: str
+# Load API credentials
+load_dotenv(dotenv_path=".env", override=True)
+_WOLFRAM_KEY = os.getenv("WOLFRAMALPHA_APP_ID")
 
 router = APIRouter()
 
-app_id = WOLFRAMALPHA_APP_ID
-client = wolframalpha.Client(app_id)
+# Initialize external client
+solver = wolframalpha.Client(_WOLFRAM_KEY)
 
-@router.post("/tools/wolframalpha")
-async def wolframalpha_query(item: QueryItem):
-    res = client.query(item.query)
+# Input schema
+class PromptInput(BaseModel):
+    query: str
 
-    # Handle the query result
-    if res['@success'] == 'false':
-        return {"result": "Query failed"}
-    else:
-        # Return the first result text
-        result = next(res.results).text
-        return {"result": result}
+@router.post("/tools/compute_engine", summary="Execute a symbolic or numeric computation via WolframAlpha.")
+async def compute_math_expression(payload: PromptInput):
+    response = solver.query(payload.query)
+
+    if response.get("@success") == "false":
+        return {"result": "Unable to process the request."}
+
+    try:
+        first_result = next(response.results).text
+    except Exception:
+        return {"result": "No valid output returned."}
+
+    return {"result": first_result}

@@ -1,7 +1,7 @@
 Deploying API Services
 =================================
 
-This tutorial guides you through deploying API services that FRIDAY can utilize to enhance its functionality. We provide several API tools, including audio2text, bing search, image search, web_loader, image_caption, and wolfram_alpha, all located within `oscopilot/tool_repository/api_tools`.
+This tutorial guides you through deploying API services that FRIDAY can utilize to enhance its functionality. We provide several API tools, including audio2text, bing search, image search, web_loader, image_caption, and wolfram_alpha, all located within `stratapilot/tool_repository/api_tools`.
 
 Configuring the Environment
 ----------------------------
@@ -23,7 +23,7 @@ Configuring API Tools
 
 2. **Selecting Required API Tools**:
 
-   In the `oscopilot/tool_repository/manager/api_server.py` file, you will configure which API tools FRIDAY will utilize. This is done by setting up the `services` and `server_list` variables.
+   In the `stratapilot/tool_repository/manager/api_server.py` file, you will configure which API tools FRIDAY will utilize. This is done by setting up the `services` and `server_list` variables.
 
    - The ``services`` dictionary includes all available API tools that FRIDAY can use. Each key represents the service name, and the value is the corresponding router object.
 
@@ -54,7 +54,7 @@ Launching the API Server
 
    .. code-block:: shell
 
-      python oscopilot/tool_repository/manager/api_server.py
+      python stratapilot/tool_repository/manager/api_server.py
 
    Successful startup messages will look like this:
 
@@ -82,7 +82,7 @@ Updating API Documentation
       :width: 100%
       :alt: Example of OpenAPI Documentation
 
-   Copy the content displayed at this URL to the `oscopilot/tool_repository/manager/openapi.json` file in your project directory. This step ensures that FRIDAY's API server has the latest documentation regarding the available API services.
+   Copy the content displayed at this URL to the `stratapilot/tool_repository/manager/openapi.json` file in your project directory. This step ensures that FRIDAY's API server has the latest documentation regarding the available API services.
 
 Testing the API Tools
 ---------------------

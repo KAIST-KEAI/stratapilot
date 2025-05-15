@@ -27,9 +27,9 @@ Initial Attempt
 
         .. code-block:: python
 
-            from oscopilot import FridayAgent
-            from oscopilot import FridayExecutor, FridayPlanner, FridayRetriever, ToolManager
-            from oscopilot.utils import setup_config, SheetTaskLoader
+            from stratapilot import FridayAgent
+            from stratapilot import FridayExecutor, FridayPlanner, FridayRetriever, ToolManager
+            from stratapilot.utils import setup_config, SheetTaskLoader
 
     - Loading Tasks:
 
@@ -85,8 +85,8 @@ Introducing Self-Learning
 
     .. code-block:: python
 
-        from oscopilot import FridayAgent, FridayExecutor, FridayPlanner, FridayRetriever, SelfLearner, SelfLearning, ToolManager, TextExtractor
-        from oscopilot.utils import setup_config
+        from stratapilot import FridayAgent, FridayExecutor, FridayPlanner, FridayRetriever, SelfLearner, SelfLearning, ToolManager, TextExtractor
+        from stratapilot.utils import setup_config
 
     - Initialization and Configuration Extraction:
 

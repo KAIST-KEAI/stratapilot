@@ -5,14 +5,14 @@ The `quick_start.py` script is a simple way to start using FRIDAY AGENT. Here's 
 
 1. **Importing Modules:**
 
-   The script begins by importing necessary modules from the `oscopilot` package:
+   The script begins by importing necessary modules from the `stratapilot` package:
 
    .. code-block:: python
 
-       from oscopilot import FridayAgent
-       from oscopilot import ToolManager
-       from oscopilot import FridayExecutor, FridayPlanner, FridayRetriever
-       from oscopilot.utils import setup_config, setup_pre_run
+       from stratapilot import FridayAgent
+       from stratapilot import ToolManager
+       from stratapilot import FridayExecutor, FridayPlanner, FridayRetriever
+       from stratapilot.utils import setup_config, setup_pre_run
 
 2. **Setting Up Configuration:**
 

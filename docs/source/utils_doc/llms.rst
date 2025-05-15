@@ -1,7 +1,7 @@
 Large Language Models
 ==============================
 
-.. autoclass:: oscopilot.utils.llms.OpenAI
+.. autoclass:: stratapilot.utils.llms.OpenAI
    :members:
    :undoc-members:
    :show-inheritance:

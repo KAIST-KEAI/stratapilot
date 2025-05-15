@@ -17,7 +17,7 @@ Initial Setup
 
     .. code-block:: python
 
-        from oscopilot.utils import setup_config, setup_pre_run
+        from stratapilot.utils import setup_config, setup_pre_run
 
         args = setup_config()
         if not args.query:

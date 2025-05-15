@@ -1,7 +1,7 @@
 OS-Copilot Config
 ==============================
 
-.. automodule:: oscopilot.utils.config
+.. automodule:: stratapilot.utils.config
    :members:
    :undoc-members:
    :show-inheritance:

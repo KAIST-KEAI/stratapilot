@@ -11,9 +11,9 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
 
-project = 'OS-Copilot'
-copyright = '2024, OS-Copilot'
-author = 'OS-Copilot'
+project = 'Stratapilot'
+copyright = '2025, Stratapilot'
+author = 'Stratapilot'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

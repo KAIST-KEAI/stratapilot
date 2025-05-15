@@ -1,7 +1,7 @@
 Server Proxy Config
 ==============================
 
-.. autoclass:: oscopilot.utils.server_config.ConfigManager
+.. autoclass:: stratapilot.utils.server_config.ConfigManager
    :members:
    :undoc-members:
    :show-inheritance:

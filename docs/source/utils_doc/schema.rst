@@ -1,7 +1,7 @@
 Data Schema
 ==============================
 
-.. automodule:: oscopilot.utils.schema
+.. automodule:: stratapilot.utils.schema
    :members:
    :undoc-members:
    :show-inheritance:

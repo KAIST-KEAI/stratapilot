@@ -10,7 +10,7 @@ First, you need to clone the repository containing the tools (referred to as "gi
 
 .. code-block:: shell
 
-   git clone https://github.com/OS-Copilot/FRIDAY-Gizmos.git
+   git clone https://github.com/KAIST-KEAI/stratapilot.git
 
 After cloning, navigate into the `FRIDAY-Gizmos` directory:
 
@@ -27,7 +27,7 @@ To add your chosen tool to FRIDAY's tool repository, run the `action_manager.py`
 
 .. code-block:: shell
 
-   python oscopilot/tool_repository/manager/tool_manager.py --add --tool_name [tool_name] --tool_path [tool_path]
+   python stratapilot/tool_repository/manager/tool_manager.py --add --tool_name [tool_name] --tool_path [tool_path]
 
 .. note::
    
@@ -41,7 +41,7 @@ If we're adding the `create_folder.py` tool located in the `Basic` directory and
 
 .. code-block:: shell
 
-   python oscopilot/tool_repository/manager/tool_manager.py --add --tool_name create_folder --tool_path Basic/create_folder.py
+   python stratapilot/tool_repository/manager/tool_manager.py --add --tool_name create_folder --tool_path Basic/create_folder.py
 
 Removing a Tool from FRIDAY
 -----------------------------
@@ -52,7 +52,7 @@ To remove a tool from FRIDAY's tool repository, you can use the `action_manager.
 
 .. code-block:: shell
 
-   python oscopilot/tool_repository/manager/tool_manager.py --delete --tool_name [tool_name]
+   python stratapilot/tool_repository/manager/tool_manager.py --delete --tool_name [tool_name]
 
 .. note::
 
@@ -65,7 +65,7 @@ If you wish to remove a tool named `create_folder`, the command would look like 
 
 .. code-block:: shell
 
-   python oscopilot/tool_repository/manager/tool_manager.py --delete --tool_name create_folder
+   python stratapilot/tool_repository/manager/tool_manager.py --delete --tool_name create_folder
 
 This command will remove the `create_folder` tool from FRIDAY's repository, effectively making it unavailable for future use within the ecosystem. It's important to note that removing a tool is a permanent action, so make sure you've backed up any necessary code or information related to the tool before proceeding with the deletion.
 

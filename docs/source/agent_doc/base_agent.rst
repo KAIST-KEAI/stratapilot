@@ -1,7 +1,7 @@
 Base Agent
 ==============================
 
-.. automodule:: oscopilot.agents.base_agent
+.. automodule:: stratapilot.agents.base_agent
    :members:
    :undoc-members:
    :show-inheritance:

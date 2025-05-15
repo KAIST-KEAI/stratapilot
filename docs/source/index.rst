@@ -1,32 +1,123 @@
-.. OS-Copilot documentation master file, created by
-   sphinx-quickstart on Thu Feb 29 15:23:26 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
 
-:github_url: https://github.com/OS-Copilot/OS-Copilot
-
-.. _OS-Copilot: https://os-copilot.github.io/
-
-Introduction
-==================================
-
-.. image:: _static/demo.png
+.. image:: _static/logo.png
+   :align: center
    :width: 100%
+
+.. container:: centered
+
+   **Next‑gen copilot agent for your OS, powered by MCP**
+
+   .. image:: https://img.shields.io/badge/Homepage-blue?style=flat
+      :target: 
+      :alt: Homepage
+      :class: badge
+
+   .. image:: https://img.shields.io/badge/Documentation-blue?style=flat
+      :target: https://strata.readthedocs.io/en/latest
+      :alt: Documentation
+      :class: badge
+
+   .. image:: https://img.shields.io/badge/License-MIT-silver?style=flat-square
+      :target: LICENSE
+      :alt: MIT License
+      :class: badge
+
+   .. image:: https://img.shields.io/badge/Follow-%40keaistrata-silver?style=flat-square&logo=x
+      :target: https://x.com/keaistrata
+      :alt: Follow @keaistrata
+      :class: badge
+
+   .. image:: https://img.shields.io/github/stars/KAIST-KEAI/stratapilot?style=flat-square&logo=github&label=Stars&color=gold
+      :target: https://github.com/KAIST-KEAI/stratapilot
+      :alt: GitHub Stars
+      :class: badge
+
+
+----
+
+**Stratapilot** is a system-level, general-purpose copilot agent that automates and executes user tasks across applications, files, and interfaces. Designed for OS‑native deployment, Stratapilot enables context-aware, multi-modal task execution through natural language input.
+
+At the core of Stratapilot is the **Model Context Protocol (MCP)** — an extensible, application-agnostic protocol that allows Stratapilot to interface with third-party software (both legacy and modern) in a structured, deterministic way. MCP defines a standard for model-to-model and model-to-application communication, making Stratapilot interoperable across tools, services, and agents without requiring custom plugins.
+
+.. image:: _static/arch.png
+   :alt: Architecture Diagram
    :align: center
 
-**OS-Copilot** is a pioneering conceptual framework for building generalist computer agents on Linux and MacOS, which provides a unified interface for app interactions in the heterogeneous OS ecosystem.
+----
 
-.. image:: _static/framework.png
-   :width: 100%
+⚡️ Quickstart
+-------------
+
+1. **Clone the repository:**
+
+   .. code-block:: bash
+
+      git clone https://github.com/KAIST-KEAI/stratapilot.git
+
+2. **Set up Python environment (3.10+):**
+
+   .. code-block:: bash
+
+      conda create -n stratapilot_env python=3.10 -y
+      conda activate stratapilot_env
+
+3. **Install dependencies:**
+
+   .. code-block:: bash
+
+      cd stratapilot
+      pip install -e .
+
+4. **Configure your backend LLM API key:**
+
+   Set your LLM provider’s API key (e.g., OpenAI) in the `.env` file and select your preferred model.
+
+5. **Run the demo:**
+
+   .. code-block:: bash
+
+      python quick_start.py
+
+6. **Set up GUI mode (optional):**
+
+   Specify the default agent prompt in a configuration file named `prompt.conf` and place it in the root directory under the cloned project. You can find an example prompt file in `prompt.py`. After this is done, enable GUI mode and start the program with:
+
+   .. code-block:: bash
+
+      python quick_start.py --gui
+
+   The prompt in the configuration file is used to fine-tune the agent’s behavior upon startup and will not be visible in the chat history. You can then chat with the agent as with any LLM chatbot service.
+
+.. image:: _static/gui.png
+   :alt: GUI Demo
    :align: center
 
-Leveraging OS-Copilot, we built **FRIDAY**, a self-improving AI assistant capable of solving general computer tasks.
+----
 
-.. image:: _static/FRIDAY.png
-   :width: 100%
-   :align: center
+🛠️ Advanced Usage
+------------------
 
-**Project Homepage:** `OS-Copilot`_
+Stratapilot provides a developer SDK for building:
+
+- **Custom MCP Workflows**: Compose complex, multi-step tasks that span filesystems, APIs, user interfaces, and third-party apps. Each workflow is defined declaratively and executed deterministically by the agent engine.
+- **Adapters for Legacy Software**: Wrap older desktop or command-line applications with an MCP-compatible interface, enabling structured communication with modern agents without modifying the original software.
+- **Headless Agents and Background Tasks**: Run silent or daemon-mode agents that respond to triggers (e.g., cron jobs, file changes, system events) instead of user queries.
+- **Plugin-Free Automation**: Stratapilot doesn’t rely on per-app plugins or brittle scripting. With MCP bindings, you can interface with existing applications through their CLI, APIs, sockets, or filesystem I/O.
+
+App Integration
+~~~~~~~~~~~~~~~
+
+Stratapilot supports a variety of integration methods out-of-the-box:
+
+- **File-level automation** (read/write/transform data files)
+- **Command-line tool orchestration** (wrap tools like `ffmpeg`, `git`, `curl`, etc.)
+- **API interactions** (REST/GraphQL endpoints through typed descriptors)
+- **Database queries** (e.g., SQLite, Postgres via connector wrappers)
+- **System and window control** (e.g., launching apps, recording input/output state)
+
+See sample code under `examples/` for SDK usage demos and integration templates. For more information about tool development using the SDK, refer to corresponding sections in this documentation.
+
+----
 
 
 Tutorials
@@ -53,49 +144,12 @@ Tutorials
 +--------------+-------------------------------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------+
 
 
-Community
-==================================
 
-Join our community to connect with other enthusiasts, share your tools and demos, and collaborate on innovative projects. Stay engaged and get the latest updates by following us:
+🤗 Contributing
+---------------
+Stratapilot welcomes contributions in any form! If you are interested in getting involved, please refer to our contribution guidelines in \ `CONTRIBUTING.md <https://github.com/KAIST-KEAI/stratapilot/blob/main/CONTRIBUTING.md>`_.
 
-- **Discord**: Join our Discord server for real-time discussions, support, and to share your work with the community. Click here to join: `Discord Server <https://discord.gg/PCeh4XbhjB>`_ .
-- **Twitter**: Follow us on Twitter `@oscopilot <https://twitter.com/oscopilot>`_ for the latest news, updates, and highlights from our community.
-
-
-Contributing
-==================================
-
-**OS-Copilot** thrives on community contributions, and we welcome involvement in any form. Whether it's adding new tools, fixing bugs, improving documentation, or sharing ideas, every contribution counts. Join our community to advance this exciting project together!
-
-Ways to Contribute
-----------------------
-
-- **Code:** Enhance OS-Copilot by adding new features, fixing bugs, or optimizing existing tools.
-
-- **Documentation:** Help make OS-Copilot more accessible by improving or expanding our documentation.
-
-- **Feedback and Ideas:** Share your insights and suggestions to make OS-Copilot even better.
-
-- **Advocacy:** Spread the word about OS-Copilot and help grow our community.
-
-
-
-Citation
-==================================
-
-For more detailed information about OS-Copilot and FRIDAY, please refer to our latest research paper:
-
-.. code-block:: bibtex
-   
-   @misc{wu2024oscopilot,
-      title={OS-Copilot: Towards Generalist Computer Agents with Self-Improvement}, 
-      author={Zhiyong Wu and Chengcheng Han and Zichen Ding and Zhenmin Weng and Zhoumianze Liu and Shunyu Yao and Tao Yu and Lingpeng Kong},
-      year={2024},
-      eprint={2402.07456},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI}
-   }
-
+````
 
 .. toctree::
    :hidden:

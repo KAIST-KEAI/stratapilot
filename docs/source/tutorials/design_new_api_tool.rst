@@ -8,7 +8,7 @@ Creating a New API Tool
 
 1. **Setting Up the API Tool**:
 
-   Begin by creating a new folder for your API tool within `oscopilot/tool_repository/api_tools`. Inside this folder, create your tool file and write the API tool code. You can refer to the FastAPI documentation (https://fastapi.tiangolo.com/reference/fastapi/) and examples in the `oscopilot/tool_repository/api_tools` directory for guidance on coding your API tool.
+   Begin by creating a new folder for your API tool within `stratapilot/tool_repository/api_tools`. Inside this folder, create your tool file and write the API tool code. You can refer to the FastAPI documentation (https://fastapi.tiangolo.com/reference/fastapi/) and examples in the `stratapilot/tool_repository/api_tools` directory for guidance on coding your API tool.
 
    Consider the following example when designing your API endpoint:
 
@@ -31,13 +31,13 @@ Integrating the API Tool
 
 2. **Registering the New API Tool**:
 
-   Update `oscopilot/tool_repository/manager/api_server.py` with the new API tool's information. Add import statements and update the `services` and `server_list` accordingly.
+   Update `stratapilot/tool_repository/manager/api_server.py` with the new API tool's information. Add import statements and update the `services` and `server_list` accordingly.
 
    Example code snippet:
 
    .. code-block:: python
 
-      from oscopilot.tool_repository.api_tools.new_api.new_api_service import router as new_api_router
+      from stratapilot.tool_repository.api_tools.new_api.new_api_service import router as new_api_router
       
       services = {
           "bing": bing_router,  # bing_search, image_search, and web_loader
@@ -58,7 +58,7 @@ Launching the Service
 
    .. code-block:: shell
 
-      python oscopilot/tool_repository/manager/api_server.py
+      python stratapilot/tool_repository/manager/api_server.py
 
    Successful launch messages should resemble the following:
 
@@ -74,7 +74,7 @@ Updating OpenAPI Documentation
 
 4. **Updating API Documentation**:
 
-   Navigate to `http://localhost:8079/openapi.json` (adjust the IP if necessary) and overwrite the content in `oscopilot/tool_repository/manager/openapi.json` with the content from this URL.
+   Navigate to `http://localhost:8079/openapi.json` (adjust the IP if necessary) and overwrite the content in `stratapilot/tool_repository/manager/openapi.json` with the content from this URL.
 
 Verifying the API Tool
 ----------------------

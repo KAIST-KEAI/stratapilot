@@ -1,57 +1,50 @@
 import pytest
 from stratapilot.utils import setup_config
 from stratapilot import FridayExecutor, ToolManager
-from stratapilot.prompts.friday_pt import prompt
+from stratapilot.prompts.friday_pt import prompt as execution_prompt_set
 
-class TestExecutor:
+class FunctionalValidator:
     """
-    Unit tests for FridayExecutor's code generation methods.
-
-    Ensures that the executor can generate executable tool code and
-    invocation statements from task descriptions without producing empty output.
+    Test suite validating code and command generation logic
+    of the automation engine.
+    
+    It checks that executable output is properly formed from given tasks.
     """
 
-    def setup_method(self, method):
+    def setup_method(self, _):
         """
-        Prepare a FridayExecutor instance before each test.
+        Initializes the test environment before each individual check.
 
-        Initializes global configuration and creates an executor using the
-        predefined execution prompts and the ToolManager class.
-
-        Args:
-            method: Reference to the test method about to run (unused).
+        This includes loading essential runtime settings and configuring
+        the executor with proper prompting strategies and tool interfacing.
         """
-        # Load environment configuration (e.g., API keys, paths)
         setup_config()
-        # Retrieve execution prompts template
-        self.prompt = prompt['execute_prompt']
-        # Instantiate the executor with its prompts and tool manager
-        self.executor = FridayExecutor(self.prompt, ToolManager)
+        self.instruction_template = execution_prompt_set['execute_prompt']
+        self.engine = FridayExecutor(self.instruction_template, ToolManager)
 
-    def test_generate_tool(self):
+    def test_tool_creation_output(self):
         """
-        Verify that generate_tool returns non-empty code or invocation.
+        Confirms that functional logic generation yields usable output.
 
-        Provides a sample task name, description, and empty context,
-        then asserts that at least one of the returned values is not empty.
+        Simulates a task scenario and verifies the output isn't fully blank.
         """
-        task_name = "move_files"
-        task_description = (
-            "Move any text file in 'working_dir/document' containing the word 'agent' "
-            "into a subfolder named 'agent'."
+        task_label = "relocate_documents"
+        task_details = (
+            "Identify any text files within 'working_dir/document' "
+            "that mention 'agent', and move them to a directory called 'agent'."
         )
-        pre_tasks_info = ""
-        relevant_code = ""
+        context_data = ""
+        previous_code = ""
 
-        code, invoke = self.executor.generate_tool(
-            task_name,
-            task_description,
-            pre_tasks_info,
-            relevant_code
+        generated_code, command = self.engine.generate_tool(
+            task_label,
+            task_details,
+            context_data,
+            previous_code
         )
 
-        assert code or invoke, (
-            "Expected non-empty code or invoke command from generate_tool"
+        assert generated_code or command, (
+            "Expected either code or a callable command, but got none."
         )
 
 if __name__ == "__main__":

@@ -1,45 +1,36 @@
 import pytest
-from stratapilot.utils import setup_config
-from stratapilot import BasicPlanner, ToolManager
-from stratapilot.prompts.friday2_pt import prompt
+from stratapilot.utils import setup_config as initialize_environment
+from stratapilot import BasicPlanner as TaskSplitter, ToolManager as ToolBox
+from stratapilot.prompts.friday2_pt import prompt as prompt_bundle
 
-class TestPlanner:
+class TestDecompositionLogic:
     """
-    Unit tests for the BasicPlanner’s task decomposition functionality.
-
-    Verifies that high-level task descriptions are properly split into actionable subtasks,
-    ensuring the planner’s core capability for breaking down complex tasks.
+    Verifies that abstract commands are successfully transformed into
+    granular execution steps by the planner module.
     """
 
-    def setup_method(self, method):
+    def setup_method(self, test_case):
         """
-        Called before each test to configure the planner instance.
+        Prepares a fresh planner instance with required configs and prompt.
 
-        Initializes configuration settings and creates a BasicPlanner using the
-        predefined planning prompt.
-
-        Args:
-            method: Reference to the test method about to run (unused).
+        This hook is invoked before every unit test. It ensures a fresh
+        planning object is instantiated for each test case.
         """
-        # Initialize global configuration for the planner
-        setup_config()
-        # Load the planning prompt template
-        self.prompt = prompt['planning_prompt']
-        # Create a planner instance with the loaded prompt
-        self.planner = BasicPlanner(self.prompt)
+        initialize_environment()
+        self.template = prompt_bundle["planning_prompt"]
+        self.splitter = TaskSplitter(self.template)
 
-    def test_decompose_task_generates_subtasks(self):
+    def test_can_extract_execution_steps(self):
         """
-        Ensure that decomposing a sample task yields at least one subtask.
+        Checks if decomposing a general directive results in concrete subtasks.
 
-        Given a descriptive task string, the planner should populate its
-        sub_task_list with non-empty entries. An empty list indicates a failure
-        to break down the task.
+        Uses a representative instruction and confirms that the result
+        contains actionable units in the planner’s task container.
         """
-        example_task = "Analyze user behavior data to identify the top three features."
-        self.planner.decompose_task(example_task)
-        assert self.planner.sub_task_list, \
-            "Expected sub_task_list to be non-empty after decomposing the task."
+        abstract_instruction = "Investigate user activity logs to determine the top three used functions."
+        self.splitter.decompose_task(abstract_instruction)
+        assert self.splitter.sub_task_list, \
+            "Planner failed to generate any subtasks from the provided input."
 
 if __name__ == "__main__":
     pytest.main()

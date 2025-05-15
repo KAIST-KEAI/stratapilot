@@ -1,61 +1,59 @@
 import pytest
-from stratapilot.utils import SheetTaskLoader, get_project_root_path
+from stratapilot.utils import SheetTaskLoader as TaskSheetHandler, get_project_root_path as fetch_root_dir
 
-class TestSheetTaskLoader:
+class TestTaskSheetHandler:
     """
-    Unit tests for the SheetTaskLoader class.
-
-    Verifies that tasks can be converted into query strings, datasets are loaded correctly,
-    and specific task entries can be retrieved by their ID.
+    Validates functionality of TaskSheetHandler including:
+    string conversion, dataset retrieval, and entry access by index.
     """
 
-    def setup_method(self, method):
+    def setup_method(self, test_func):
         """
-        Configure a SheetTaskLoader instance before each test.
+        Prepares test environment for TaskSheetHandler.
 
-        Constructs the loader using a sample JSONL file path.
+        This method runs before each test case and sets up
+        the handler with a predefined sample file.
 
         Args:
-            method: Reference to the upcoming test method (unused).
+            test_func: Reference to the test function being run (not used).
         """
-        sheet_task_path = (
-            get_project_root_path() + "/examples/SheetCopilot/sheet_task.jsonl"
+        file_location = fetch_root_dir() + "/examples/SheetCopilot/sheet_task.jsonl"
+        self.loader = TaskSheetHandler(file_location)
+
+    def test_generate_query_from_task(self):
+        """
+        Asserts that the handler generates a query string when given task input.
+
+        The method task2query should yield a non-blank response
+        when fed with representative arguments.
+        """
+        outcome = self.loader.task2query(
+            context="given input scenario",
+            instructions="carry out task",
+            file_path="sample/location.xlsx"
         )
-        self.sheet_task_loader = SheetTaskLoader(sheet_task_path)
+        assert outcome.strip(), "Query generation failed — result was empty."
 
-    def test_task2query(self):
+    def test_retrieve_task_dataset(self):
         """
-        Ensure that task2query produces a non-empty query string.
+        Validates dataset population from the input file.
 
-        Calls task2query with example parameters and asserts
-        the returned string is not empty.
+        Confirms that the loader can produce a populated
+        dataset structure from the file contents.
         """
-        query = self.sheet_task_loader.task2query(
-            context="some context.",
-            instructions="do something.",
-            file_path="dummy/path.xlsx"
-        )
-        assert query != "", "Expected non-empty query string from task2query"
+        results = self.loader.load_sheet_task_dataset()
+        assert results, "Dataset loading returned an empty structure."
 
-    def test_load_sheet_task_dataset(self):
+    def test_access_task_by_identifier(self):
         """
-        Verify that the dataset loader returns a non-empty list.
+        Checks that a specific task record can be fetched by its numeric key.
 
-        Calls load_sheet_task_dataset and asserts
-        the returned list contains at least one entry.
+        Retrieves the record associated with ID 1 and verifies
+        that the result is a valid dictionary with content.
         """
-        dataset = self.sheet_task_loader.load_sheet_task_dataset()
-        assert dataset, "Expected non-empty list from load_sheet_task_dataset"
-
-    def test_get_task_by_id(self):
-        """
-        Confirm that get_data_by_task_id returns valid data for a given ID.
-
-        Retrieves task ID 1 and asserts
-        the result is a non-empty dictionary.
-        """
-        task_data = self.sheet_task_loader.get_data_by_task_id(1)
-        assert task_data, "Expected non-empty dict from get_data_by_task_id for ID 1"
+        record = self.loader.get_data_by_task_id(1)
+        assert isinstance(record, dict) and record, \
+            "Failed to retrieve task data using ID = 1"
 
 if __name__ == "__main__":
     pytest.main()

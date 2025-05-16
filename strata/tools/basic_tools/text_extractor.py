@@ -1,45 +1,44 @@
-from stratapilot.utils.utils import send_chat_prompts
-from stratapilot.prompts.friday_pt import prompt
+from stratapilot.utils.utils import send_chat_prompts as dispatch_chat_tasks
+from stratapilot.prompts.friday_pt import prompt as prompt_bundle
 
 
-class TextExtractor:
+class ContentFetcher:
     """
-    Extracts file text by delegating to an AI agent using a specified prompt template.
+    Interfaces with a smart assistant to retrieve the text within a specified file.
 
-    This class formats a text-extraction prompt for a given file path and invokes the agent
-    to retrieve the file's content.
+    Formats and submits a query to the assistant using a templated message.
     """
 
-    def __init__(self, agent):
+    def __init__(self, assistant):
         """
-        Create a TextExtractor instance with the provided agent.
+        Initialize with an assistant capable of handling natural language queries.
 
         Args:
-            agent (object): AI agent used to execute the text extraction prompt.
+            assistant (object): An interface to a language-based processing agent.
         """
-        self._agent = agent
-        self._template = prompt['text_extract_prompt']
+        self._executor = assistant
+        self._query_template = prompt_bundle['text_extract_prompt']
 
-    def extract_file_content(self, file_path: str) -> str:
+    def get_file_text(self, target_path: str) -> str:
         """
-        Use the agent to extract and return the contents of the specified file.
+        Send a query to obtain the text from the file located at `target_path`.
 
         Args:
-            file_path (str): Path to the target file.
+            target_path (str): Full path to the document.
 
         Returns:
-            str: Text content extracted by the agent, or an empty string if extraction failed.
+            str: Retrieved content, or an empty string if nothing was returned.
         """
-        # Prepare the prompt with the target file path
-        prompt_text = self._template.format(file_path=file_path)
+        # Generate the query to send to the assistant
+        constructed_query = self._query_template.format(file_path=target_path)
 
-        # Execute the extraction task
-        self._agent.run(prompt_text)
+        # Delegate the execution to the assistant
+        self._executor.run(constructed_query)
 
-        # Retrieve the last executed tool node's return value, if available
-        nodes = list(self._agent.planner.tool_node.values())
-        if not nodes:
+        # Extract the result from the most recently completed task node
+        executed_nodes = list(self._executor.planner.tool_node.values())
+        if not executed_nodes:
             return ""
 
-        last_node = nodes[-1]
-        return getattr(last_node, 'return_val', '')
+        latest_result = executed_nodes[-1]
+        return getattr(latest_result, 'return_val', '')

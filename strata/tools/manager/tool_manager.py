@@ -1,234 +1,161 @@
-# __import__('pysqlite3')
-# import sys
-# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+import os
+import json
+import re
+import sys
+import argparse
+from dotenv import load_dotenv
 
 from langchain.vectorstores import Chroma
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain_community.embeddings import OllamaEmbeddings
-import argparse
-import json
-import sys
-import os
-import re
-from dotenv import load_dotenv
-load_dotenv(dotenv_path='.env', override=True)
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-OPENAI_ORGANIZATION = os.getenv('OPENAI_ORGANIZATION')
 
-EMBED_MODEL_TYPE = os.getenv('EMBED_MODEL_TYPE')
-EMBED_MODEL_NAME = os.getenv('EMBED_MODEL_NAME')
+load_dotenv(dotenv_path=".env", override=True)
 
-class ToolManager:
+API_KEY = os.getenv("OPENAI_API_KEY")
+ORG_ID = os.getenv("OPENAI_ORGANIZATION")
+
+MODEL_KIND = os.getenv("EMBED_MODEL_TYPE")
+MODEL_ID = os.getenv("EMBED_MODEL_NAME")
+
+
+class RegistryHandler:
     """
-    Oversees storage, retrieval, and management of tool definitions in a repository.
-
-    Each tool entry includes code, description, and metadata. ToolManager uses a vector
-    database for similarity-based lookup and maintains JSON metadata alongside code
-    and description files on disk.
-
-    Attributes:
-        generated_tools (dict): Mapping of tool names to their {'code', 'description'}.
-        generated_tool_repo_dir (str): Root directory for tool metadata, code, and descriptions.
-        vectordb_path (str): File path for the persistent vector database directory.
-        vectordb (Chroma): In-memory client for similarity searches over tool descriptions.
+    Handles a searchable library of components. Each record includes source logic and
+    explanatory context. Descriptions are indexed via a vector database for fast retrieval.
     """
 
-    def __init__(self, generated_tool_repo_dir: str):
+    def __init__(self, storage_base: str):
         """
-        Initialize ToolManager by loading existing tools and setting up persistence.
+        Bootstraps the registry by loading stored data and setting up persistence layers.
 
         Args:
-            generated_tool_repo_dir (str): Directory containing generated_tools.json,
-                                          tool_code/, and tool_description/ subfolders.
-        Raises:
-            AssertionError: If the vector database and JSON metadata have mismatched counts.
+            storage_base (str): Root folder housing records and metadata.
         """
-        self.generated_tool_repo_dir = generated_tool_repo_dir
-        # Load JSON metadata of existing tools
-        tools_json = os.path.join(generated_tool_repo_dir, "generated_tools.json")
-        with open(tools_json, "r") as f:
-            self.generated_tools = json.load(f)
+        self._storage_root = storage_base
+        index_path = os.path.join(storage_base, "component_index.json")
 
-        # Ensure storage directories exist
-        self.vectordb_path = os.path.join(generated_tool_repo_dir, "vectordb")
-        os.makedirs(self.vectordb_path, exist_ok=True)
-        os.makedirs(os.path.join(generated_tool_repo_dir, "tool_code"), exist_ok=True)
-        os.makedirs(os.path.join(generated_tool_repo_dir, "tool_description"), exist_ok=True)
+        with open(index_path, "r") as f:
+            self._records = json.load(f)
 
-        # Choose embedding engine
-        if EMBED_MODEL_TYPE == "OpenAI":
-            embedder = OpenAIEmbeddings(
-                openai_api_key=OPENAI_API_KEY,
-                openai_organization=OPENAI_ORGANIZATION
+        self._vector_dir = os.path.join(storage_base, "index_vectors")
+        os.makedirs(self._vector_dir, exist_ok=True)
+        os.makedirs(os.path.join(storage_base, "impl"), exist_ok=True)
+        os.makedirs(os.path.join(storage_base, "docs"), exist_ok=True)
+
+        if MODEL_KIND == "OpenAI":
+            embed = OpenAIEmbeddings(
+                openai_api_key=API_KEY,
+                openai_organization=ORG_ID
             )
         else:
-            embedder = OllamaEmbeddings(model=EMBED_MODEL_NAME)
+            embed = OllamaEmbeddings(model=MODEL_ID)
 
-        # Initialize or connect to vector database for description similarity
-        self.vectordb = Chroma(
-            collection_name="tool_vectordb",
-            embedding_function=embedder,
-            persist_directory=self.vectordb_path
+        self._index = Chroma(
+            collection_name="component_search",
+            embedding_function=embed,
+            persist_directory=self._vector_dir
         )
 
-        # Validate that Chroma and JSON metadata are in sync
-        count_db = self.vectordb._collection.count()
-        count_json = len(self.generated_tools)
-        assert count_db == count_json, (
-            f"Vector DB ({count_db} entries) and metadata ({count_json} entries) are out of sync."
-        )
+        assert self._index._collection.count() == len(self._records), \
+            "Mismatch between stored JSON records and vector entries"
 
     @property
-    def programs(self) -> str:
-        """
-        Concatenate all stored tool code into one string.
-
-        Returns:
-            str: Each tool's source code separated by blank lines.
-        """
-        return "\n\n".join(entry["code"] for entry in self.generated_tools.values())
+    def all_code(self) -> str:
+        """Return all saved code blocks concatenated."""
+        return "\n\n".join(entry["code"] for entry in self._records.values())
 
     @property
-    def descriptions(self) -> dict:
-        """
-        Get a mapping of tool names to their descriptions.
-
-        Returns:
-            dict: {tool_name: description}
-        """
-        return {name: entry["description"] for name, entry in self.generated_tools.items()}
+    def summaries(self) -> dict:
+        """Expose component names and their documented roles."""
+        return {name: rec["description"] for name, rec in self._records.items()}
 
     @property
-    def tool_names(self):
-        """
-        List all available tool identifiers.
+    def keys(self):
+        """Return all record identifiers."""
+        return self._records.keys()
 
-        Returns:
-            KeysView[str]: A view of all tool names.
-        """
-        return self.generated_tools.keys()
+    def fetch_code(self, label: str) -> str:
+        """Grab the source code for a named record."""
+        return self._records[label]["code"]
 
-    def get_tool_code(self, tool_name: str) -> str:
+    def register(self, metadata: dict):
         """
-        Fetch source code for a given tool.
+        Insert or replace a registry entry with provided details.
 
         Args:
-            tool_name (str): Identifier of the tool.
-        Returns:
-            str: The tool's code.
-        Raises:
-            KeyError: If the tool is not present.
+            metadata (dict): Includes 'task_name', 'code', and 'description'.
         """
-        return self.generated_tools[tool_name]["code"]
+        ident = metadata["task_name"]
+        code = metadata["code"]
+        doc = metadata["description"]
 
-    def add_new_tool(self, info: dict):
-        """
-        Register a new tool, updating JSON metadata, vector DB, and on-disk files.
+        if ident in self._records:
+            self._index._collection.delete(ids=[ident])
 
-        Args:
-            info (dict): Contains 'task_name', 'code', and 'description' keys.
-        """
-        name = info['task_name']
-        code = info['code']
-        desc = info['description']
+        self._index.add_texts(texts=[doc], ids=[ident], metadatas=[{"name": ident}])
+        self._records[ident] = {"code": code, "description": doc}
 
-        # If tool exists, remove old entry from vector DB
-        if name in self.generated_tools:
-            self.vectordb._collection.delete(ids=[name])
+        assert self._index._collection.count() == len(self._records), \
+            "Post-update count discrepancy in index and memory store"
 
-        # Add description to vector DB for similarity search
-        self.vectordb.add_texts(texts=[desc], ids=[name], metadatas=[{'name': name}])
-
-        # Update in-memory and JSON metadata
-        self.generated_tools[name] = {'code': code, 'description': desc}
-        assert self.vectordb._collection.count() == len(self.generated_tools), \
-            "Vector DB and metadata count mismatch after addition."
-
-        # Save code and description files
-        code_path = os.path.join(self.generated_tool_repo_dir, 'tool_code', f"{name}.py")
-        with open(code_path, 'w') as f:
+        with open(os.path.join(self._storage_root, "impl", f"{ident}.py"), "w") as f:
             f.write(code)
-        desc_path = os.path.join(self.generated_tool_repo_dir, 'tool_description', f"{name}.txt")
-        with open(desc_path, 'w') as f:
-            f.write(desc)
 
-        # Persist metadata JSON and vector DB
-        json_path = os.path.join(self.generated_tool_repo_dir, 'generated_tools.json')
-        with open(json_path, 'w') as f:
-            json.dump(self.generated_tools, f, indent=4)
-        self.vectordb.persist()
+        with open(os.path.join(self._storage_root, "docs", f"{ident}.txt"), "w") as f:
+            f.write(doc)
 
-    def exist_tool(self, tool: str) -> bool:
+        with open(os.path.join(self._storage_root, "component_index.json"), "w") as f:
+            json.dump(self._records, f, indent=4)
+
+        self._index.persist()
+
+    def is_known(self, label: str) -> bool:
+        """Check if a named entry exists."""
+        return label in self._records
+
+    def query_names(self, clue: str, k: int = 10) -> list[str]:
         """
-        Check if a tool is already registered.
+        Run a similarity search on descriptions using a natural language clue.
 
         Args:
-            tool (str): Tool identifier.
-        Returns:
-            bool: True if present, else False.
-        """
-        return tool in self.generated_tools
+            clue (str): Search prompt.
+            k (int): Max result count.
 
-    def retrieve_tool_name(self, query: str, k: int = 10) -> list[str]:
-        """
-        Find top-k similar tools by description based on a text query.
-
-        Args:
-            query (str): Text to search descriptions.
-            k (int): Maximum number of tools to return.
         Returns:
-            list[str]: Sorted list of tool names by similarity.
+            list[str]: Matched names.
         """
-        total = self.vectordb._collection.count()
-        k = min(total, k)
+        count = self._index._collection.count()
+        k = min(k, count)
         if k == 0:
             return []
 
-        results = self.vectordb.similarity_search_with_score(query, k=k)
-        return [doc.metadata['name'] for doc, _ in results]
+        matches = self._index.similarity_search_with_score(clue, k=k)
+        return [match.metadata["name"] for match, _ in matches]
 
-    def retrieve_tool_description(self, names: list[str]) -> list[str]:
-        """
-        Fetch descriptions for a list of tools.
+    def get_docs(self, labels: list[str]) -> list[str]:
+        """Return descriptions for multiple entries."""
+        return [self._records[x]["description"] for x in labels]
 
-        Args:
-            names (list[str]): Tool identifiers.
-        Returns:
-            list[str]: Corresponding descriptions.
-        """
-        return [self.generated_tools[name]['description'] for name in names]
+    def get_sources(self, labels: list[str]) -> list[str]:
+        """Return code for multiple entries."""
+        return [self._records[x]["code"] for x in labels]
 
-    def retrieve_tool_code(self, names: list[str]) -> list[str]:
-        """
-        Fetch source code snippets for a list of tools.
+    def discard(self, label: str):
+        """Fully remove a record from all storage locations."""
+        if label in self._records:
+            self._index._collection.delete(ids=[label])
 
-        Args:
-            names (list[str]): Tool identifiers.
-        Returns:
-            list[str]: Corresponding code snippets.
-        """
-        return [self.generated_tools[name]['code'] for name in names]
-
-    def delete_tool(self, tool: str):
-        """
-        Remove a tool from memory, storage, and vector DB.
-
-        Args:
-            tool (str): Identifier of the tool to delete.
-        """
-        if tool in self.generated_tools:
-            self.vectordb._collection.delete(ids=[tool])
-
-        # Update JSON metadata
-        json_path = os.path.join(self.generated_tool_repo_dir, 'generated_tools.json')
-        with open(json_path, 'r') as f:
+        index_fp = os.path.join(self._storage_root, "component_index.json")
+        with open(index_fp, "r") as f:
             data = json.load(f)
-        data.pop(tool, None)
-        with open(json_path, 'w') as f:
+        data.pop(label, None)
+        with open(index_fp, "w") as f:
             json.dump(data, f, indent=4)
 
-        # Remove on-disk files
-        code_file = os.path.join(self.generated_tool_repo_dir, 'tool_code', f"{tool}.py")
-        if os.path.exists(code_file): os.remove(code_file)
-        desc_file = os.path.join(self.generated_tool_repo_dir, 'tool_description', f"{tool}.txt")
-        if os.path.exists(desc_file): os.remove(desc_file)
+        code_fp = os.path.join(self._storage_root, "impl", f"{label}.py")
+        if os.path.exists(code_fp):
+            os.remove(code_fp)
+
+        doc_fp = os.path.join(self._storage_root, "docs", f"{label}.txt")
+        if os.path.exists(doc_fp):
+            os.remove(doc_fp)

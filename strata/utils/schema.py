@@ -1,81 +1,80 @@
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Dict, List, Optional, Union
-from enum import IntEnum
+from enum import Enum, IntEnum
+from typing import List, Optional
 
 
 @dataclass
-class RepairingResult:
+class PatchOutcome:
     """
-    Stores the results and intermediate representation of the repairing process
+    Captures the outcome and diagnostics from a corrective pass.
     """
-    status: str = ''
-    code: str = ''
-    critique: str = ''
-    score: str = ''
-    result: str = ''
+    state: str = ''
+    body: str = ''
+    remarks: str = ''
+    rating: str = ''
+    output: str = ''
 
 
 @dataclass
-class JudgementResult:
+class ReviewOutcome:
     """
-    Stores the results and intermediate representation of the judging process
+    Summary of evaluation results from assessment logic.
     """
-    status: bool = False
-    critique: str = ''
+    passed: bool = False
+    feedback: str = ''
     score: int = 0
-    # reasoning: str = ''
-    # error_type: str = ''
+    # rationale: str = ''
+    # issue_class: str = ''
 
 
 @dataclass
-class InnerMonologue:
+class CognitiveTrace:
     """
-    Stores all the intermediate representation during agent running
+    Tracks internal decision snapshots and transitions during runtime.
     """
-    reasoning: str = ''
-    error_type: str = ''
-    critique: str = ''
-    isRePlan: bool = False
-    isTaskCompleted: bool = False
-    result: str = ''
+    analysis: str = ''
+    issue_class: str = ''
+    reflection: str = ''
+    needs_adjustment: bool = False
+    task_finalized: bool = False
+    output: str = ''
 
 
 @dataclass
-class EnvState:
+class SessionSnapshot:
     """
-    Represents the state of an environment in which commands are executed.
+    Snapshot of the shell-like environment at a particular step.
     """
-    command: List[str] = field(default_factory=list)
-    result: Optional[str] = ''
-    error: Optional[str] = None
-    pwd: Optional[str] = ''
-    ls: Optional[str] = ''
+    actions: List[str] = field(default_factory=list)
+    outcome: Optional[str] = ''
+    fault: Optional[str] = None
+    cwd: Optional[str] = ''
+    listing: Optional[str] = ''
 
     def __str__(self):
-        return (f"Result: {self.result}\n"
-                f"Error: {self.error}\n"
-                f"PWD: {self.pwd}\n"
-                f"LS: {self.ls}")    
-    
+        return (f"Output: {self.outcome}\n"
+                f"Error: {self.fault}\n"
+                f"Current Directory: {self.cwd}\n"
+                f"Directory Contents: {self.listing}")
+
 
 @dataclass
-class ExecutionState:
+class EvalFrame:
     """
-    Stores all the intermediate representation during agent executing.
+    Consolidates execution-related context for a computation step.
     """
-    state: Optional[EnvState] = None
-    node_type: str = ''
-    description: str = ''
-    code: str = ''
-    result: str = ''
-    relevant_code: str = ''
+    env: Optional[SessionSnapshot] = None
+    category: str = ''
+    summary: str = ''
+    script: str = ''
+    outcome: str = ''
+    linked_code: str = ''
 
-    def get_all_state(self):
-        return self.state, self.node_type, self.description, self.code, self.result, self.relevant_code
-    
+    def extract_all(self):
+        return self.env, self.category, self.summary, self.script, self.outcome, self.linked_code
 
-class TaskStatusCode(IntEnum):
-    START = 1
-    FAILED = 6
-    COMPLETED = 7
+
+class StatusCode(IntEnum):
+    BOOT = 1
+    ERROR = 6
+    DONE = 7

@@ -1,230 +1,184 @@
-import openai
-import logging
 import os
+import sys
 import time
-import requests
 import json
+import logging
+import requests
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
-# Load environment variables with override option
+# Load environment variables (override mode)
 load_dotenv(override=True)
 
-# Configuration parameters
-MODEL_NAME = os.getenv('MODEL_NAME', 'gpt-3.5-turbo')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-OPENAI_ORGANIZATION = os.getenv('OPENAI_ORGANIZATION')
-BASE_URL = os.getenv('OPENAI_BASE_URL')
-MODEL_SERVER = os.getenv('MODEL_SERVER', 'http://localhost:11434')
+# Environment config
+ENGINE = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
+API_KEY = os.getenv("OPENAI_API_KEY")
+ORG_ID = os.getenv("OPENAI_ORGANIZATION")
+ALT_URL = os.getenv("OPENAI_BASE_URL")
+FALLBACK_ENDPOINT = os.getenv("MODEL_SERVER", "http://localhost:11434")
 
-# Configure logging
+# Setup logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
-class LLMClient:
-    """
-    Abstract base class for Large Language Model (LLM) clients.
-    Defines a standard interface for interacting with different LLM providers.
-    """
-    def __init__(self, model_name: str):
-        self.model_name = model_name
-        
-    def chat(self, messages: List[Dict[str, str]], temperature: float = 0.0, 
-             prefix: str = "") -> str:
-        """
-        Sends a chat message to the LLM and returns the response.
-        
-        Args:
-            messages: List of message dictionaries with 'role' and 'content' keys.
-            temperature: Controls the randomness of the model's output.
-            prefix: Prefix to add to log messages.
-            
-        Returns:
-            The model's response as a string.
-        """
-        raise NotImplementedError("Subclasses must implement this method")
 
-class OpenAIClient(LLMClient):
+class LanguageGateway:
     """
-    Client for interacting with OpenAI's language models.
-    Handles authentication and chat completions using the OpenAI API.
+    Generic LLM interaction interface. Acts as the base class for vendor-specific clients.
     """
-    def __init__(self, api_key: str, model_name: str = MODEL_NAME, 
-                 organization: Optional[str] = None):
-        super().__init__(model_name)
-        self.api_key = api_key
-        self.organization = organization
-        self._configure_openai()
-        
-    def _configure_openai(self) -> None:
-        """Configures the OpenAI client with API credentials and settings."""
-        openai.api_key = self.api_key
-        if self.organization:
-            openai.organization = self.organization
-        if BASE_URL:
-            openai.base_url = BASE_URL
-            
-    def chat(self, messages: List[Dict[str, str]], temperature: float = 0.0, 
-             prefix: str = "") -> str:
+
+    def __init__(self, model: str):
+        self.model = model
+
+    def interact(self, prompts: List[Dict[str, str]], temperature: float = 0.0, tag: str = "") -> str:
         """
-        Sends a chat request to the OpenAI model and processes the response.
-        
-        Args:
-            messages: List of messages in OpenAI format.
-            temperature: Randomness parameter (0.0 to 2.0).
-            prefix: Log message prefix.
-            
-        Returns:
-            The generated response text.
+        Executes a prompt cycle and returns the language model's output.
         """
+        raise NotImplementedError("Concrete subclass required")
+
+
+class OpenAIWrapper(LanguageGateway):
+    """
+    Wrapper for OpenAI’s chat-based models.
+    Handles credentials and request configuration.
+    """
+
+    def __init__(self, token: str, model: str = ENGINE, org: Optional[str] = None):
+        super().__init__(model)
+        self.token = token
+        self.org = org
+        self._init_openai()
+
+    def _init_openai(self):
+        import openai
+        openai.api_key = self.token
+        if self.org:
+            openai.organization = self.org
+        if ALT_URL:
+            openai.base_url = ALT_URL
+        self._client = openai
+
+    def interact(self, prompts: List[Dict[str, str]], temperature: float = 0.0, tag: str = "") -> str:
         try:
-            response = openai.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
+            reply = self._client.chat.completions.create(
+                model=self.model,
+                messages=prompts,
                 temperature=temperature
             )
-            content = response.choices[0].message.content
-            logger.info(f"{prefix}Response: {content[:200]}...")  # Truncate long responses
-            return content
-        except Exception as e:
-            logger.error(f"OpenAI API call failed: {str(e)}")
+            output = reply.choices[0].message.content
+            log.info(f"{tag}Result: {output[:200]}...")
+            return output
+        except Exception as err:
+            log.error(f"[OpenAI] Failure: {err}")
             raise
 
-class OllamaClient(LLMClient):
+
+class OllamaWrapper(LanguageGateway):
     """
-    Client for interacting with Ollama-based language models.
-    Handles HTTP requests to a local or remote Ollama server.
+    Client adapter for models hosted via Ollama API.
     """
-    def __init__(self, model_name: str = MODEL_NAME, server_url: str = MODEL_SERVER):
-        super().__init__(model_name)
-        self.server_url = server_url
-        self.chat_url = f"{server_url}/api/chat"
-        
-    def chat(self, messages: List[Dict[str, str]], temperature: float = 0.0, 
-             prefix: str = "") -> str:
-        """
-        Sends a chat request to the Ollama model and processes the response.
-        
-        Args:
-            messages: List of messages in Ollama format.
-            temperature: Randomness parameter.
-            prefix: Log message prefix.
-            
-        Returns:
-            The generated response text.
-        """
-        payload = {
-            "model": self.model_name,
-            "messages": messages,
+
+    def __init__(self, model: str = ENGINE, endpoint: str = FALLBACK_ENDPOINT):
+        super().__init__(model)
+        self.api_url = f"{endpoint}/api/chat"
+
+    def interact(self, prompts: List[Dict[str, str]], temperature: float = 0.0, tag: str = "") -> str:
+        req = {
+            "model": self.model,
+            "messages": prompts,
             "temperature": temperature,
             "stream": False
         }
-        
-        headers = {"Content-Type": "application/json"}
-        
+
         try:
-            response = requests.post(self.chat_url, json=payload, headers=headers, timeout=300)
-            response.raise_for_status()  # Raise exception for HTTP errors
-            content = response.json()["message"]["content"]
-            logger.info(f"{prefix}Response: {content[:200]}...")  # Truncate long responses
-            return content
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Ollama API call failed: {str(e)}")
-            raise
-        except (KeyError, json.JSONDecodeError) as e:
-            logger.error(f"Failed to parse Ollama response: {str(e)}")
+            response = requests.post(
+                self.api_url,
+                json=req,
+                headers={"Content-Type": "application/json"},
+                timeout=300
+            )
+            response.raise_for_status()
+            text = response.json()["message"]["content"]
+            log.info(f"{tag}Result: {text[:200]}...")
+            return text
+        except (requests.RequestException, KeyError, json.JSONDecodeError) as err:
+            log.error(f"[Ollama] Failed to process response: {err}")
             raise
 
-def create_llm_client() -> LLMClient:
-    """
-    Creates an appropriate LLM client based on environment configuration.
-    Prefers OpenAI if API key is set, otherwise falls back to Ollama.
-    
-    Returns:
-        An initialized LLM client instance.
-    """
-    if OPENAI_API_KEY:
-        return OpenAIClient(api_key=OPENAI_API_KEY, model_name=MODEL_NAME, 
-                           organization=OPENAI_ORGANIZATION)
-    elif MODEL_SERVER:
-        return OllamaClient(model_name=MODEL_NAME, server_url=MODEL_SERVER)
-    else:
-        raise ValueError("No API configuration found. Set OPENAI_API_KEY or MODEL_SERVER.")
 
-def main():
+def get_llm() -> LanguageGateway:
     """
-    Main entry point for the script.
-    Demonstrates usage of the LLM client to generate a response for a given task.
+    Instantiate the appropriate LLM backend depending on available credentials.
+    """
+    if API_KEY:
+        return OpenAIWrapper(token=API_KEY, model=ENGINE, org=ORG_ID)
+    if FALLBACK_ENDPOINT:
+        return OllamaWrapper(model=ENGINE, endpoint=FALLBACK_ENDPOINT)
+    raise RuntimeError("Missing LLM configuration")
+
+
+def boot():
+    """
+    Entry point for launching the language model interface.
+    Runs a single prompt round and reports execution stats.
     """
     try:
-        start_time = time.time()
-        
-        # Initialize LLM client
-        llm_client = create_llm_client()
-        logger.info(f"LLM client initialized: {llm_client.__class__.__name__}, Model: {llm_client.model_name}")
-        
-        # Prepare conversation messages
-        messages = [
+        start = time.time()
+
+        agent = get_llm()
+        log.info(f"Connected to: {agent.__class__.__name__} | Model: {agent.model}")
+
+        dialogue = [
             {
-                'role': 'system',
-                'content': 'You are Open Interpreter, a world-class programmer capable of completing any task by executing code.\n'
-                           'Follow these guidelines:\n'
-                           '1. Always start with a plan and recap it between code blocks.\n'
-                           '2. Execute code on the user\'s machine with full permission.\n'
-                           '3. Use txt or json files to exchange data between programming languages.\n'
-                           '4. You can access the internet and install new packages.\n'
-                           '5. Write messages to the user in Markdown format.\n'
-                           '6. Break down tasks into small, iterative steps.\n\n'
-                           '# COMPUTER API\n'
-                           'A `computer` module is already imported with these functions:\n'
-                           '```python\n'
-                           'computer.browser.search(query)  # Returns Google search results\n'
-                           'computer.files.edit(path, original, replacement)  # Edits a file\n'
-                           'computer.calendar.create_event(title, start, end, notes, location)  # Creates a calendar event\n'
-                           'computer.calendar.get_events(start_date, end_date=None)  # Gets calendar events\n'
-                           'computer.calendar.delete_event(title, start_date)  # Deletes a calendar event\n'
-                           'computer.contacts.get_phone_number(name)  # Gets a phone number\n'
-                           'computer.contacts.get_email_address(name)  # Gets an email address\n'
-                           'computer.mail.send(to, subject, body, attachments)  # Sends an email\n'
-                           'computer.mail.get(count, unread=True)  # Gets emails\n'
-                           'computer.mail.unread_count()  # Counts unread emails\n'
-                           'computer.sms.send(phone_number, message)  # Sends a text message\n'
-                           '```\n'
-                           'Do not import the computer module; it is already available.\n\n'
-                           'User Info:\n'
-                           'Name: hanchengcheng\n'
-                           'CWD: /Users/hanchengcheng/Documents/official_space/open-interpreter\n'
-                           'SHELL: /bin/bash\n'
-                           'OS: Darwin\n'
-                           'Use only the provided `execute(language, code)` function.'
+                "role": "system",
+                "content": (
+                    "You are an expert code assistant. Follow these principles:\n"
+                    "1. Plan before coding and explain logic.\n"
+                    "2. Write and execute scripts directly.\n"
+                    "3. Use file I/O for data exchange.\n"
+                    "4. Fetch resources as needed.\n"
+                    "5. Format output using Markdown.\n"
+                    "6. Solve in iterative steps.\n"
+                    "# System APIs pre-imported:\n"
+                    "computer.browser.search(query)\n"
+                    "computer.files.edit(path, original, replacement)\n"
+                    "computer.calendar.create_event(title, start, end, notes, location)\n"
+                    "computer.calendar.get_events(start_date, end_date=None)\n"
+                    "computer.calendar.delete_event(title, start_date)\n"
+                    "computer.contacts.get_phone_number(name)\n"
+                    "computer.contacts.get_email_address(name)\n"
+                    "computer.mail.send(to, subject, body, attachments)\n"
+                    "computer.mail.get(count, unread=True)\n"
+                    "computer.mail.unread_count()\n"
+                    "computer.sms.send(phone_number, message)\n"
+                    "Do not import 'computer'. Use it directly.\n"
+                    "Execute code using the built-in `execute(language, code)` function."
+                )
             },
             {
-                'role': 'user',
-                'content': "Plot AAPL and META's normalized stock prices"
+                "role": "user",
+                "content": "Plot normalized stock prices for AAPL and META"
             }
         ]
-        
-        # Send request to LLM
-        logger.info("Sending request to LLM...")
-        response = llm_client.chat(messages, temperature=0.2, prefix="[Main]")
-        
-        # Process and display response
-        print("\n===== LLM Response =====")
-        print(response)
-        
-        # Log execution statistics
-        end_time = time.time()
-        execution_time = end_time - start_time
-        print(f"\nResponse length: {len(response)} characters")
-        print(f"Execution time: {execution_time:.2f} seconds")
-        
-    except Exception as e:
-        logger.exception("An error occurred during execution")
-        print(f"Error: {str(e)}")
+
+        log.info("Sending message to model...")
+        reply = agent.interact(dialogue, temperature=0.2, tag="[Run]")
+
+        print("\n=== Model Response ===")
+        print(reply)
+
+        elapsed = time.time() - start
+        print(f"\nCharacters returned: {len(reply)}")
+        print(f"Total time: {elapsed:.2f} seconds")
+
+    except Exception as err:
+        log.exception("Unhandled failure during model interaction")
+        print(f"Fatal error: {err}")
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    main()
+    boot()

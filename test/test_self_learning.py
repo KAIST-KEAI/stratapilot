@@ -1,102 +1,95 @@
 import pytest
-from stratapilot import FridayAgent, FridayExecutor, FridayPlanner, FridayRetriever, SelfLearner, SelfLearning, ToolManager, TextExtractor
+from stratapilot import (
+    FridayAgent, FridayExecutor, FridayPlanner, FridayRetriever,
+    SelfLearner, SelfLearning, ToolManager, TextExtractor
+)
 from stratapilot.utils import setup_config
 
-class TestSelfLearning:
+class LearningFlowValidator:
     """
-    Unit tests for the SelfLearning workflow.
+    Validates the end-to-end functionality of the autonomous training system.
 
-    Verifies text extraction, course generation, and the execution
-    of learning sessions using mock or sample inputs.
+    Covers reading input data, forming educational content,
+    and simulating interactive sessions.
     """
 
-    def setup_method(self, method):
+    def setup_method(self, _):
         """
-        Set up the SelfLearning environment before each test.
+        Initializes the environment and constructs the training handler.
 
-        Loads configuration, initializes a FridayAgent, and creates
-        a SelfLearning instance with its dependencies.
-
-        Args:
-            method: Reference to the upcoming test method (unused).
+        Loads all required runtime settings, instantiates the primary agent,
+        and binds the learning components together for downstream use.
         """
-        # Load application configuration and parameters
-        self.args = setup_config()
-        self.software_name = self.args.software_name
-        self.package_name = self.args.package_name
-        self.demo_file_path = self.args.demo_file_path
+        self.env = setup_config()
+        self.software = self.env.software_name
+        self.bundle = self.env.package_name
+        self.sample_path = self.env.demo_file_path
 
-        # Initialize the core agent and self-learning components
-        self.friday_agent = FridayAgent(
+        self.mentor = FridayAgent(
             FridayPlanner,
             FridayRetriever,
             FridayExecutor,
             ToolManager,
-            config=self.args
+            config=self.env
         )
-        self.self_learning = SelfLearning(
-            agent=self.friday_agent,
+
+        self.trainer = SelfLearning(
+            agent=self.mentor,
             learner_cls=SelfLearner,
             tool_manager=ToolManager,
-            config=self.args,
+            config=self.env,
             text_extractor_cls=TextExtractor
         )
 
-    def test_text_extract(self):
+    def test_data_ingestion(self):
         """
-        Ensure the text extractor returns non-empty content from the demo file.
+        Verifies that input data can be extracted from the example file.
 
-        Calls extract_file_content on the configured extractor and asserts
-        that the returned string is not empty.
+        Checks that the extraction logic yields usable text.
         """
-        extractor = self.self_learning.text_extractor
-        content = extractor.extract_file_content(self.demo_file_path)
-        assert content, "Expected non-empty content from text extractor"
+        reader = self.trainer.text_extractor
+        data = reader.extract_file_content(self.sample_path)
+        assert data, "Text extractor returned empty result."
 
-    def test_course_design(self):
+    def test_curriculum_blueprint(self):
         """
-        Validate that the learner can generate a course outline from sample data.
+        Assures that the learner designs a valid structure from provided content.
 
-        Uses a sample CSV-like string as demo content to design a course,
-        and checks that the resulting structure is not empty.
+        Uses static spreadsheet-style input and confirms generation of a non-empty plan.
         """
-        sample_content = (
+        mock_text = (
             "Invoice No.,Date,Sales Rep,Product,Price,Units,Sales\n"
             "10500,2011-05-25,Joe,Majestic,30,25,750\n"
             "10501,2011-05-25,Moe,Quad,32,21,672\n"
             "10502,2011-05-27,Moe,Majestic,30,5,150"
         )
-        course = self.self_learning.learner.design_course(
-            self.software_name,
-            self.package_name,
-            self.demo_file_path,
-            sample_content
+        curriculum = self.trainer.learner.design_course(
+            self.software, self.bundle, self.sample_path, mock_text
         )
-        assert course, "Expected non-empty course design output"
+        assert curriculum, "Failed to construct course outline from input."
 
-    def test_learn_course(self):
+    def test_simulated_session(self):
         """
-        Confirm that learn_course executes without errors on a demo course.
+        Confirms that the learning engine processes the mock training track.
 
-        Provides a small mock course mapping and verifies
-        that learn_course processes each lesson without raising exceptions.
+        Executes a predefined task map and ensures stability throughout the session.
         """
-        demo_course = {
-            "read_sheet1": (
-                "Task: Read 'sheet1' from Invoices.xlsx with openpyxl."
-                " File Path: /path/to/Invoices.xlsx"
+        mock_curriculum = {
+            "sheet_reader": (
+                "Task: Read 'sheet1' from Invoices.xlsx using openpyxl."
+                " Path: /path/to/Invoices.xlsx"
             ),
-            "calculate_sales": (
-                "Task: Sum 'Sales' column in sheet1 of Invoices.xlsx."
-                " File Path: /path/to/Invoices.xlsx"
+            "aggregate_sales": (
+                "Task: Compute total from 'Sales' column in sheet1 of Invoices.xlsx."
+                " Path: /path/to/Invoices.xlsx"
             ),
-            "create_report": (
-                "Task: Create a summary sheet named 'Report' in Invoices.xlsx."
-                " File Path: /path/to/Invoices.xlsx"
+            "generate_summary": (
+                "Task: Produce a report tab labeled 'Report' inside Invoices.xlsx."
+                " Path: /path/to/Invoices.xlsx"
             ),
         }
-        # Should run without throwing any errors
-        self.self_learning.learn_course(demo_course)
+
+        self.trainer.learn_course(mock_curriculum)  # Should not raise any error
 
 if __name__ == "__main__":
     pytest.main()

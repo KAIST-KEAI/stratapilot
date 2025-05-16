@@ -1,43 +1,40 @@
 import pytest
 from stratapilot.utils import setup_config
 from stratapilot import FridayPlanner, ToolManager
-from stratapilot.prompts.friday_pt import prompt
+from stratapilot.prompts.friday_pt import prompt as planning_templates
 
-class TestPlanner:
+class TaskSegmentationSuite:
     """
-    Unit tests for FridayPlanner's task breakdown functionality.
+    Test collection for verifying the breakdown logic of the FridayPlanner module.
 
-    Confirms that the planner can decompose high-level tasks into actionable subtasks,
-    validating its core decomposition logic.
+    Validates that complex objectives are correctly parsed into discrete operations.
     """
 
-    def setup_method(self, method):
+    def setup_method(self, _):
         """
-        Prepare a FridayPlanner instance before each test.
+        Sets up required test conditions before each individual case runs.
 
-        Loads configuration settings and initializes the planner with a predefined
-        planning prompt template.
-
-        Args:
-            method: Reference to the test method about to run (unused).
+        Initializes global configs and prepares the planning engine using
+        a fixed instruction prompt tailored for task breakdown.
         """
         setup_config()
-        self.prompt = prompt['planning_prompt']
-        self.planner = FridayPlanner(self.prompt)
+        self.template = planning_templates['planning_prompt']
+        self.analyzer = FridayPlanner(self.template)
 
-    def test_decompose_task(self):
+    def test_simple_breakdown(self):
         """
-        Ensure that decomposing a simple task yields at least one subtask.
+        Verifies that even minimal tasks are translated into structured plans.
 
-        Calls decompose_task with a basic instruction and verifies
-        that the planner's sub_task_list is not empty.
+        Invokes the planner on a trivial setup command and checks that
+        actionable steps are produced as expected.
         """
-        task = "Install pandas package"
-        tool_description_pair = ""  # No prior tool descriptions provided
+        high_level_instruction = "Install pandas package"
+        tool_context = ""  # No contextual tools specified
 
-        self.planner.decompose_task(task, tool_description_pair)
-        assert self.planner.sub_task_list, \
-            "Expected non-empty sub_task_list after decomposition."
+        self.analyzer.decompose_task(high_level_instruction, tool_context)
+
+        assert self.analyzer.sub_task_list, \
+            "Planner failed to generate any actionable items from the instruction."
 
 if __name__ == "__main__":
     pytest.main()

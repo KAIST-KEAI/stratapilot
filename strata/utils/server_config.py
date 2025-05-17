@@ -1,61 +1,57 @@
 import os
 from typing import Optional
 
-class ConfigManager:
+
+class EnvTuner:
     """
-    Singleton class designed to manage application-wide configuration settings.
-    Manages HTTP/HTTPS proxy configurations and environment variable interactions.
+    Centralized utility for managing runtime networking settings.
 
-    Maintains a single instance throughout the application lifecycle.
-    Handles proxy setup, teardown, and environment variable management.
-
+    Implements a singleton-style instance that modifies environment-level
+    proxy variables, offering setter, enabler, and cleaner interfaces.
+    
     Attributes:
-        _instance: Private static reference to the singleton instance.
-        http_proxy: HTTP proxy URL configuration.
-        https_proxy: HTTPS proxy URL configuration.
+        _singleton: Internal instance holder.
+        _http: HTTP proxy URL.
+        _https: HTTPS proxy URL.
     """
-    _instance: Optional['ConfigManager'] = None
+    _singleton: Optional['EnvTuner'] = None
 
-    def __new__(cls) -> 'ConfigManager':
+    def __new__(cls) -> 'EnvTuner':
         """
-        Creates and returns the singleton instance, initializing default proxy settings.
+        Ensures a single shared instance across the application.
         
         Returns:
-            The singleton instance of ConfigManager.
+            EnvTuner: The globally shared instance.
         """
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            # Default proxy configuration - override with set_proxies()
-            cls._instance.http_proxy = "http://127.0.0.1:10809"
-            cls._instance.https_proxy = "http://127.0.0.1:10809"
-        return cls._instance
+        if cls._singleton is None:
+            cls._singleton = super().__new__(cls)
+            cls._singleton._http = "http://127.0.0.1:10809"
+            cls._singleton._https = "http://127.0.0.1:10809"
+        return cls._singleton
 
-    def set_proxies(self, http_proxy: Optional[str], https_proxy: Optional[str]) -> None:
+    def configure(self, http: Optional[str], https: Optional[str]) -> None:
         """
-        Configures HTTP and HTTPS proxy settings.
-        
+        Updates internal proxy routing values.
+
         Args:
-            http_proxy: HTTP proxy URL (e.g., "http://proxy.example.com:8080").
-            https_proxy: HTTPS proxy URL (e.g., "http://proxy.example.com:8080").
+            http (Optional[str]): New HTTP route string.
+            https (Optional[str]): New HTTPS route string.
         """
-        self.http_proxy = http_proxy
-        self.https_proxy = https_proxy
+        self._http = http
+        self._https = https
 
-    def apply_proxies(self) -> None:
+    def activate(self) -> None:
         """
-        Applies configured proxy settings to environment variables.
-        Updates 'http_proxy' and 'https_proxy' environment variables based on current configuration.
-        Does not modify environment variables if proxy is set to None.
+        Pushes proxy routing to the process environment.
         """
-        if self.http_proxy is not None:
-            os.environ["http_proxy"] = self.http_proxy
-        if self.https_proxy is not None:
-            os.environ["https_proxy"] = self.https_proxy
+        if self._http:
+            os.environ["http_proxy"] = self._http
+        if self._https:
+            os.environ["https_proxy"] = self._https
 
-    def clear_proxies(self) -> None:
+    def reset(self) -> None:
         """
-        Removes proxy configurations from environment variables.
-        Safely removes 'http_proxy' and 'https_proxy' from environment variables if they exist.
+        Clears any routing configurations from the environment.
         """
         os.environ.pop("http_proxy", None)
         os.environ.pop("https_proxy", None)

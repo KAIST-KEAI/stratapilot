@@ -1,524 +1,280 @@
-import copy
-import numpy as np
-import itertools
-import json
-import logging
 import os
 import re
+import json
+import copy
 import string
+import random
+import logging
+import platform
+import itertools
+from functools import wraps
 from typing import Any, Dict, List, Optional, Generator, Tuple
+
+import numpy as np
+from bs4 import BeautifulSoup
 from tqdm import tqdm
 import tiktoken
-import random
 from datasets import load_dataset
-from functools import wraps
-from bs4 import BeautifulSoup
 
-from strata.prompts.general_pt import prompt as general_pt
+from strata.prompts.general_pt import prompt as gpt_prompts
 from strata.utils.llms import OpenAI
-import platform
 
-def save_json(file_path: str, new_json_content: Dict[str, Any] | List[Any]) -> None:
-    """
-    Saves JSON content to a file, handling both creation and updates.
-    If the file exists and contains a list, new content is appended/extended.
-    If it contains a dictionary, new content updates the existing data.
 
-    Args:
-        file_path (str): Path to the JSON file.
-        new_json_content (dict or list): Content to save.
-    """
-    if os.path.exists(file_path):
+# --- File Operations ---
+def export_to_json(path: str, data: Dict[str, Any] | List[Any]) -> None:
+    if os.path.exists(path):
         try:
-            with open(file_path, 'r') as f:
-                json_content = json.load(f)
-        except json.JSONDecodeError as e:
-            logging.error(f"Failed to load existing JSON: {e}")
+            with open(path, 'r') as file:
+                existing = json.load(file)
+        except json.JSONDecodeError as err:
+            logging.error(f"Corrupt JSON: {err}")
             return
 
-        if isinstance(json_content, list):
-            if isinstance(new_json_content, list):
-                json_content.extend(new_json_content)
+        if isinstance(existing, list):
+            if isinstance(data, list):
+                existing.extend(data)
             else:
-                json_content.append(new_json_content)
-        elif isinstance(json_content, dict):
-            if isinstance(new_json_content, dict):
-                json_content.update(new_json_content)
-            else:
-                logging.warning("Cannot update dictionary with non-dict type")
-                return
+                existing.append(data)
+        elif isinstance(existing, dict) and isinstance(data, dict):
+            existing.update(data)
         else:
-            logging.warning(f"Unsupported JSON structure: {type(json_content)}")
+            logging.warning("Data type mismatch. Cannot update JSON.")
             return
 
-        with open(file_path, 'w') as f:
-            json.dump(json_content, f, indent=4)
+        with open(path, 'w') as file:
+            json.dump(existing, file, indent=4)
     else:
-        with open(file_path, 'w') as f:
-            json.dump(new_json_content, f, indent=4)
+        with open(path, 'w') as file:
+            json.dump(data, file, indent=4)
 
-def read_json(file_path: str) -> Dict[str, Any] | List[Any]:
-    """
-    Reads JSON content from a file.
 
-    Args:
-        file_path (str): Path to the JSON file.
-
-    Returns:
-        dict or list: Parsed JSON content.
-    """
+def import_from_json(path: str) -> Dict[str, Any] | List[Any]:
     try:
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        logging.error(f"Invalid JSON format: {e}")
-        raise
-    except FileNotFoundError as e:
-        logging.error(f"File not found: {e}")
+        with open(path, 'r') as file:
+            return json.load(file)
+    except (json.JSONDecodeError, FileNotFoundError) as err:
+        logging.error(f"Load error: {err}")
         raise
 
-def random_string(length: int) -> str:
-    """
-    Generates a random alphanumeric string of specified length.
 
-    Args:
-        length (int): Desired string length.
-
-    Returns:
-        str: Random string.
-    """
+# --- Utility Functions ---
+def random_id(length: int) -> str:
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-def num_tokens_from_string(text: str) -> int:
-    """
-    Calculates the number of tokens in a string using GPT-4 tokenizer.
 
-    Args:
-        text (str): Input text.
+def count_tokens(text: str) -> int:
+    tokenizer = tiktoken.encoding_for_model('gpt-4-1106-preview')
+    return len(tokenizer.encode(text))
 
-    Returns:
-        int: Token count.
-    """
-    encoding = tiktoken.encoding_for_model('gpt-4-1106-preview')
-    return len(encoding.encode(text))
 
-def parse_content(content: str, html_type: str = "html.parser") -> str:
-    """
-    Parses HTML content, removing irrelevant elements (nav, scripts, headers, etc.)
-    and cleans the resulting text.
+def extract_text_from_html(html: str, parser: str = "html.parser") -> str:
+    allowed_parsers = ["html.parser", "lxml", "lxml-xml", "xml", "html5lib"]
+    if parser not in allowed_parsers:
+        raise ValueError(f"Parser '{parser}' is invalid. Choose from {allowed_parsers}.")
 
-    Args:
-        content (str): HTML content.
-        html_type (str): Parser type (default: 'html.parser').
+    dom = BeautifulSoup(html, parser)
+    original_len = len(dom.get_text())
 
-    Returns:
-        str: Cleaned text content.
-    """
-    supported_parsers = ["html.parser", "lxml", "lxml-xml", "xml", "html5lib"]
-    if html_type not in supported_parsers:
-        raise ValueError(f"Unsupported parser: {html_type}. Use one of {supported_parsers}")
+    for el in dom(["nav", "aside", "form", "header", "noscript", "svg", "canvas", "footer", "script", "style"]):
+        el.decompose()
 
-    soup = BeautifulSoup(content, html_type)
-    original_size = len(str(soup.get_text()))
+    for target_id in ["sidebar", "main-navigation", "menu-main-menu"]:
+        for el in dom.find_all(id=target_id):
+            el.decompose()
 
-    # Remove non-content elements
-    for tag in soup(["nav", "aside", "form", "header", "noscript", "svg", "canvas", "footer", "script", "style"]):
-        tag.decompose()
+    for class_name in ["elementor-location-header", "navbar-header", "nav", "header-sidebar-wrapper", "blog-sidebar-wrapper", "related-posts"]:
+        for el in dom.find_all(class_=class_name):
+            el.decompose()
 
-    # Remove by ID
-    for id_ in ["sidebar", "main-navigation", "menu-main-menu"]:
-        for tag in soup.find_all(id=id_):
-            tag.decompose()
+    clean_text = sanitize_string(dom.get_text())
+    if original_len:
+        shrink = round((1 - len(clean_text) / original_len) * 100, 2)
+        logging.info(f"Trimmed HTML text to {len(clean_text)} chars ({shrink}% reduction)")
+    return clean_text
 
-    # Remove by class
-    for class_ in [
-        "elementor-location-header", "navbar-header", "nav", 
-        "header-sidebar-wrapper", "blog-sidebar-wrapper", "related-posts"
-    ]:
-        for tag in soup.find_all(class_=class_):
-            tag.decompose()
 
-    cleaned_content = soup.get_text()
-    cleaned_content = clean_string(cleaned_content)
+def sanitize_string(s: str) -> str:
+    s = s.replace("\n", " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    s = s.replace("\\", "").replace("#", " ")
+    return re.sub(r"([^"]\w\s])\1+", r"\1", s)
 
-    cleaned_size = len(cleaned_content)
-    if original_size > 0:
-        reduction_percent = round((1 - cleaned_size / original_size) * 100, 2)
-        logging.info(f"Content cleaned: {cleaned_size} chars (reduced by {reduction_percent}%)")
 
-    return cleaned_content
-
-def clean_string(text: str) -> str:
-    """
-    Cleans text by normalizing whitespace, removing backslashes,
-    replacing hashes with spaces, and reducing consecutive non-alphanumeric characters.
-
-    Args:
-        text (str): Input text.
-
-    Returns:
-        str: Cleaned text.
-    """
-    # Normalize whitespace
-    text = text.replace("\n", " ")
-    text = re.sub(r"\s+", " ", text).strip()
-
-    # Remove backslashes and replace hashes
-    text = text.replace("\\", "").replace("#", " ")
-
-    # Reduce consecutive non-alphanumeric characters
-    return re.sub(r"([^\w\s])\1+", r"\1", text)
-
-def is_readable(s: str) -> bool:
-    """
-    Checks if a string is mostly printable (heuristic for readability).
-
-    Args:
-        s (str): Input string.
-
-    Returns:
-        bool: True if >95% of characters are printable.
-    """
+def mostly_printable(txt: str) -> bool:
     try:
-        printable_ratio = sum(c in string.printable for c in s) / len(s)
-        return printable_ratio > 0.95
+        return sum(c in string.printable for c in txt) / len(txt) > 0.95
     except ZeroDivisionError:
-        logging.warning("Empty string detected")
+        logging.warning("Blank input detected")
         return False
 
-def format_source(source: str, limit: int = 20) -> str:
-    """
-    Formats a string (e.g., URL) to a concise preview by showing first and last parts.
 
-    Args:
-        source (str): Input string.
-        limit (int): Number of characters to show at start/end.
-
-    Returns:
-        str: Formatted preview (e.g., "https://exam...ample.com").
-    """
-    if len(source) > 2 * limit:
-        return f"{source[:limit]}...{source[-limit:]}"
+def preview_string(source: str, segment: int = 20) -> str:
+    if len(source) > 2 * segment:
+        return f"{source[:segment]}...{source[-segment:]}"
     return source
 
-def is_valid_json_string(source: str) -> bool:
-    """
-    Validates if a string is properly formatted JSON.
 
-    Args:
-        source (str): Input string.
-
-    Returns:
-        bool: True if valid JSON.
-    """
+def validate_json_string(payload: str) -> bool:
     try:
-        json.loads(source)
+        json.loads(payload)
         return True
     except json.JSONDecodeError:
-        logging.error("Invalid JSON format")
+        logging.error("Bad JSON string")
         return False
 
-def chunks(iterable: List[Any], batch_size: int = 100, desc: str = "Processing") -> Generator[Tuple[Any], None, None]:
-    """
-    Splits an iterable into batches for processing with progress tracking.
 
-    Args:
-        iterable (list): Input data.
-        batch_size (int): Size of each batch.
-        desc (str): Description for progress bar.
-
-    Yields:
-        tuple: Batch of items.
-    """
-    it = iter(iterable)
-    total_size = len(iterable)
-
-    with tqdm(total=total_size, desc=desc, unit="batch") as pbar:
+def batch_iterator(data: List[Any], size: int = 100, label: str = "Progress") -> Generator[Tuple[Any], None, None]:
+    it = iter(data)
+    total = len(data)
+    with tqdm(total=total, desc=label, unit="chunk") as bar:
         while True:
-            batch = tuple(itertools.islice(it, batch_size))
+            batch = tuple(itertools.islice(it, size))
             if not batch:
                 break
             yield batch
-            pbar.update(len(batch))
+            bar.update(len(batch))
 
-def generate_prompt(template: str, replace_dict: Dict[str, Any]) -> str:
-    """
-    Generates a prompt by replacing placeholders in a template.
 
-    Args:
-        template (str): Template string with placeholders (e.g., "{key}").
-        replace_dict (dict): Mapping of placeholders to values.
+def fill_template(base: str, replacements: Dict[str, Any]) -> str:
+    result = copy.deepcopy(base)
+    for key, val in replacements.items():
+        result = result.replace(key, str(val))
+    return result
 
-    Returns:
-        str: Filled prompt.
-    """
-    prompt = copy.deepcopy(template)
-    for key, value in replace_dict.items():
-        prompt = prompt.replace(key, str(value))
-    return prompt
 
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """
-    Computes cosine similarity between two vectors.
+def cosine_sim(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
-    Args:
-        a (array): First vector.
-        b (array): Second vector.
 
-    Returns:
-        float: Cosine similarity.
-    """
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-def send_chat_prompts(sys_prompt: str, user_prompt: str, llm: OpenAI, prefix: str = "") -> str:
-    """
-    Sends a chat prompt to an LLM with system and user messages.
-
-    Args:
-        sys_prompt (str): System prompt.
-        user_prompt (str): User prompt.
-        llm (OpenAI): LLM instance.
-        prefix (str): Optional prefix for logging.
-
-    Returns:
-        str: LLM response.
-    """
-    messages = [
-        {"role": "system", "content": sys_prompt},
-        {"role": "user", "content": user_prompt}
+def query_llm(system_msg: str, user_msg: str, model: OpenAI, tag: str = "") -> str:
+    conversation = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg}
     ]
-    return llm.chat(messages, prefix=prefix)
+    return model.chat(conversation, prefix=tag)
 
-def get_project_root_path() -> str:
-    """
-    Returns the absolute path of the project root directory.
-    Assumes this function is located in strata/utils/.
 
-    Returns:
-        str: Project root path with trailing slash.
-    """
-    script_path = os.path.abspath(__file__)
-    utils_dir = os.path.dirname(script_path)
-    oscopilot_dir = os.path.dirname(utils_dir)
-    return os.path.dirname(oscopilot_dir) + '/'
+def get_repo_root() -> str:
+    here = os.path.abspath(__file__)
+    return os.path.dirname(os.path.dirname(os.path.dirname(here))) + '/'
 
-def GAIA_postprocess(question: str, response: str) -> str:
-    """
-    Processes GAIA benchmark responses using an LLM extractor.
 
-    Args:
-        question (str): Original question.
-        response (str): LLM response.
-
-    Returns:
-        str: Processed response.
-    """
+def refine_response_for_gaia(question: str, output: str) -> str:
     llm = OpenAI()
-    extractor_prompt = general_pt['GAIA_ANSWER_EXTRACTOR_PROMPT'].format(
-        question=question,
-        response=response
-    )
-    return send_chat_prompts('', extractor_prompt, llm)
+    prompt = gpt_prompts['GAIA_ANSWER_EXTRACTOR_PROMPT'].format(question=question, response=output)
+    return query_llm('', prompt, llm)
 
-class GAIALoader:
-    """
-    Loads and processes tasks from the GAIA benchmark dataset.
-    """
-    def __init__(self, level: int = 1, cache_dir: Optional[str] = None):
-        """
-        Initializes the GAIA dataset loader.
 
-        Args:
-            level (int): Dataset level (1-3).
-            cache_dir (str, optional): Directory to cache dataset.
-        """
-        self.cache_dir = cache_dir
+# --- GAIA Loader ---
+class GaiaDataLoader:
+    def __init__(self, level: int = 1, cache: Optional[str] = None):
+        self.cache = cache
         try:
-            dataset_args = {
-                "path": "gaia-benchmark/GAIA",
-                "name": f"2023_level{level}"
-            }
-            if cache_dir:
-                assert os.path.exists(cache_dir), f"Cache directory not found: {cache_dir}"
-                dataset_args["cache_dir"] = cache_dir
-            self.dataset = load_dataset(**dataset_args)
-        except Exception as e:
-            logging.error(f"Failed to load GAIA dataset: {e}")
+            args = {"path": "gaia-benchmark/GAIA", "name": f"2023_level{level}"}
+            if cache:
+                if not os.path.exists(cache):
+                    raise FileNotFoundError(f"Cache not found: {cache}")
+                args["cache_dir"] = cache
+            self.dataset = load_dataset(**args)
+        except Exception as exc:
+            logging.error(f"Dataset loading failed: {exc}")
             raise
 
-    def get_data_by_task_id(self, task_id: str, dataset_type: str) -> Optional[Dict[str, Any]]:
-        """
-        Retrieves a specific task by ID from the dataset.
-
-        Args:
-            task_id (str): Task ID.
-            dataset_type (str): Dataset split (e.g., 'validation', 'test').
-
-        Returns:
-            dict or None: Task data if found, otherwise None.
-        """
-        if dataset_type not in self.dataset:
-            logging.warning(f"Dataset split not found: {dataset_type}")
+    def fetch_by_id(self, uid: str, split: str) -> Optional[Dict[str, Any]]:
+        if split not in self.dataset:
+            logging.warning(f"Invalid split: {split}")
             return None
-
-        for record in self.dataset[dataset_type]:
-            if record['task_id'] == task_id:
-                return record
+        for item in self.dataset[split]:
+            if item['task_id'] == uid:
+                return item
         return None
 
-    def task2query(self, task: Dict[str, Any]) -> str:
-        """
-        Converts a GAIA task into a user query string.
-
-        Args:
-            task (dict): Task data.
-
-        Returns:
-            str: Formatted query.
-        """
+    def construct_query(self, task: Dict[str, Any]) -> str:
         query = f"Your task is: {task['Question']}"
-        if task['file_name']:
-            file_type = task['file_name'].split('.')[-1]
-            query += f"\n{task['file_path']} is the absolute path to a {file_type} file you need to use."
-        
-        logging.info(f"GAIA Task {task['task_id']}: {query}")
+        if task.get('file_name'):
+            extension = task['file_name'].split('.')[-1]
+            query += f"\nThe file path is {task['file_path']}, which is a {extension} file."
+        logging.info(f"Loaded GAIA task {task['task_id']}")
         return query
 
-class SheetTaskLoader:
-    """
-    Loads and processes sheet (Excel) tasks from JSONL files.
-    """
-    def __init__(self, sheet_task_path: Optional[str] = None):
-        """
-        Initializes the sheet task loader.
 
-        Args:
-            sheet_task_path (str, optional): Path to JSONL file containing tasks.
-        """
-        self.sheet_task_path = sheet_task_path
-        self.dataset = None
-
-        if sheet_task_path:
-            assert os.path.exists(sheet_task_path), f"File not found: {sheet_task_path}"
+# --- Sheet Task Handler ---
+class SpreadsheetTaskLoader:
+    def __init__(self, path: Optional[str] = None):
+        self.path = path
+        self.dataset = []
+        if path:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"Missing sheet data: {path}")
             try:
-                self.dataset = self.load_sheet_task_dataset()
-            except Exception as e:
-                logging.error(f"Failed to load sheet tasks: {e}")
+                self.dataset = self._load_from_jsonl()
+            except Exception as exc:
+                logging.error(f"Sheet task loading failed: {exc}")
                 raise
         else:
-            logging.warning("No sheet task file provided")
+            logging.warning("No Excel task path set")
 
-    def load_sheet_task_dataset(self) -> List[str]:
-        """
-        Loads sheet tasks from a JSONL file.
-
-        Returns:
-            list: List of formatted queries.
-        """
-        dataset = []
-        with open(self.sheet_task_path, 'r') as file:
-            for line in file:
-                task_info = json.loads(line)
-                query = self.task2query(
-                    context=task_info['Context'],
-                    instructions=task_info['Instructions'],
-                    file_path=get_project_root_path() + task_info['file_path']
+    def _load_from_jsonl(self) -> List[str]:
+        result = []
+        with open(self.path, 'r') as f:
+            for line in f:
+                record = json.loads(line)
+                query = self._format_query(
+                    context=record['Context'],
+                    instructions=record['Instructions'],
+                    file_path=get_repo_root() + record['file_path']
                 )
-                dataset.append(query)
-        return dataset
+                result.append(query)
+        return result
 
-    def task2query(self, context: str, instructions: str, file_path: str) -> str:
-        """
-        Converts sheet task details into a formatted query.
-
-        Args:
-            context (str): Task context.
-            instructions (str): Task instructions.
-            file_path (str): Path to Excel file.
-
-        Returns:
-            str: Formatted query.
-        """
-        SHEET_TASK_PROMPT = """You are an expert in handling Excel files. {context}
+    def _format_query(self, context: str, instructions: str, file_path: str) -> str:
+        base = """You are proficient in spreadsheet processing.
+{context}
 Your task is: {instructions}
-The file path of the Excel file is: {file_path}. All operations must reference this file path."""
-        
-        return SHEET_TASK_PROMPT.format(context=context, instructions=instructions, file_path=file_path)
+Refer to this file: {file_path} for all operations."""
+        return base.format(context=context, instructions=instructions, file_path=file_path)
 
-    def get_data_by_task_id(self, task_id: int) -> str:
-        """
-        Retrieves a task by ID from the loaded dataset.
+    def get_task(self, index: int) -> str:
+        if not self.dataset:
+            raise ValueError("No task data available")
+        return self.dataset[index]
 
-        Args:
-            task_id (int): Task index.
 
-        Returns:
-            str: Task query.
-        """
-        if self.dataset is None:
-            raise ValueError("Dataset not loaded")
-        return self.dataset[task_id]
-
-def get_os_version() -> str:
-    """
-    Detects and returns the current operating system version.
-
-    Returns:
-        str: OS version string (e.g., "macOS 13.5").
-    """
-    system = platform.system()
-    
-    if system == "Darwin":
-        return f'macOS {platform.mac_ver()[0]}'
-    elif system == "Linux":
+# --- OS Info ---
+def fetch_os_info() -> str:
+    os_name = platform.system()
+    if os_name == "Darwin":
+        return f"macOS {platform.mac_ver()[0]}"
+    elif os_name == "Linux":
         try:
-            with open("/etc/os-release") as f:
-                for line in f:
+            with open("/etc/os-release") as file:
+                for line in file:
                     if line.startswith("PRETTY_NAME"):
                         return line.split("=")[1].strip().strip('"')
         except FileNotFoundError:
             pass
         return platform.version()
+    return "Unknown OS"
+
+
+def assert_os_compatibility(ver: str) -> None:
+    if any(keyword in ver for keyword in ["mac", "Ubuntu", "CentOS"]):
+        logging.info(f"Compatible OS: {ver}")
     else:
-        return "Unknown OS"
+        raise ValueError(f"Unsupported platform: {ver}")
 
-def check_os_version(s: str) -> None:
-    """
-    Validates if the OS version is supported.
 
-    Args:
-        s (str): OS version string.
-
-    Raises:
-        ValueError: If OS is unsupported.
-    """
-    if "mac" in s or "Ubuntu" in s or "CentOS" in s:
-        logging.info(f"Supported OS: {s}")
-    else:
-        raise ValueError(f"Unsupported OS: {s}")
-
-def api_exception_mechanism(max_retries: int = 3):
-    """
-    Decorator to add retry logic to API calls.
-
-    Args:
-        max_retries (int): Maximum number of retries.
-
-    Returns:
-        function: Decorated function with retry mechanism.
-    """
-    def decorator(func):
+# --- Retry Mechanism ---
+def retry_on_failure(max_tries: int = 3):
+    def outer(func):
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_retries:
+        def wrapped(*args, **kwargs):
+            for attempt in range(1, max_tries + 1):
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
-                    attempts += 1
-                    logging.error(f"Attempt {attempts}/{max_retries} failed: {e}")
-                    if attempts == max_retries:
-                        logging.error(f"Max retries reached for {func.__name__}")
+                except Exception as err:
+                    logging.error(f"Retry {attempt}/{max_tries} failed: {err}")
+                    if attempt == max_tries:
                         raise
-        return wrapper
-    return decorator
+        return wrapped
+    return outer

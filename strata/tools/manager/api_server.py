@@ -2,56 +2,59 @@ import os
 import dotenv
 
 from fastapi import FastAPI
-from strata.utils.server_config import ConfigManager
-dotenv.load_dotenv(dotenv_path='.env', override=True)
-app = FastAPI()
-
-# Import your services
-from strata.tool_repository.api_tools.bing.bing_service import router as bing_router
-from strata.tool_repository.api_tools.audio2text.audio2text_service import router as audio2text_router
-from strata.tool_repository.api_tools.image_caption.image_caption_service import router as image_caption_router
-from strata.tool_repository.api_tools.wolfram_alpha.wolfram_alpha import router as wolfram_alpha_router
+from strata.utils.server_config import ConfigManager as CfgMgr
+dotenv.load_dotenv(dotenv_path=".env", override=True)
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-class LoggingMiddleware(BaseHTTPMiddleware):
+# Instantiate the API app
+application = FastAPI()
+
+# Plug-in imports
+from strata.tool_repository.api_tools.bing.bing_service import router as mod_bing
+from strata.tool_repository.api_tools.audio2text.audio2text_service import router as mod_audio
+from strata.tool_repository.api_tools.image_caption.image_caption_service import router as mod_imgcap
+from strata.tool_repository.api_tools.wolfram_alpha.wolfram_alpha import router as mod_math
+
+
+class TrafficTracer(BaseHTTPMiddleware):
     """
-    Middleware to log incoming requests and outgoing responses, including errors.
+    Captures inbound API activity and outbound replies, including fault cases.
     """
     async def dispatch(self, request: Request, call_next):
-        print(f"Incoming request: {request.method} {request.url}")
+        print(f"[Trace] ➡️ {request.method} {request.url}")
         try:
-            response = await call_next(request)
-        except Exception as exc:
-            print(f"Request error: {exc}")
-            raise exc from None
-        else:
-            print(f"Outgoing response: {response.status_code}")
-        return response
+            result = await call_next(request)
+        except Exception as issue:
+            print(f"[Error] ❌ {issue}")
+            raise issue from None
+        print(f"[Trace] ⬅️ Status {result.status_code}")
+        return result
 
 
-# Register the logging middleware
-app.add_middleware(LoggingMiddleware)
+# Wire in middleware for tracing
+application.add_middleware(TrafficTracer)
 
-# Map service names to routers
-services = {
-    "bing": bing_router,            # Provides Bing search, image search, and web loading
-    "audio2text": audio2text_router,
-    "image_caption": image_caption_router,
-    "wolfram_alpha": wolfram_alpha_router,
+# Routing table for available plugins
+plugin_routes = {
+    "web_search": mod_bing,
+    "speech_to_text": mod_audio,
+    "caption_gen": mod_imgcap,
+    "math_solver": mod_math,
 }
 
-# List of services to include in this server instance
-enabled_services = ["bing", "audio2text", "image_caption"]
+# List of modules to activate
+active_modules = ["web_search", "speech_to_text", "caption_gen"]
 
-# Dynamically include only the enabled service routers
-for name in enabled_services:
-    router = services.get(name)
-    if router:
-        app.include_router(router)
+# Selectively register API endpoints
+for plugin in active_modules:
+    route = plugin_routes.get(plugin)
+    if route:
+        application.include_router(route)
 
 
 if __name__ == "__main__":
-    # Start the Uvicorn ASGI server
-    uvicorn.run(app, host="0.0.0.0", port=8079)
+    import uvicorn
+    # Spin up the service
+    uvicorn.run(application, host="0.0.0.0", port=8079)

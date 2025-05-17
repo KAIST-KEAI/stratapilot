@@ -6,8 +6,8 @@
 
 <h3><b>Next-gen copilot agent for you OS, powered by MCP</b></h3>
 
-[![Homepage](https://img.shields.io/badge/Homepage-blue?style=flat)]()
-[![Documentation](https://img.shields.io/badge/Documentation-blue?style=flat)](https://strata.readthedocs.io/en/latest)
+[![Homepage](https://img.shields.io/badge/Homepage-blue?style=flat)](https://stratapilot.xyz/)
+[![Documentation](https://img.shields.io/badge/Documentation-blue?style=flat)](https://stratapilot.readthedocs.io/en/latest/index.html)
 
 [![MIT](https://img.shields.io/badge/License-MIT-silver?style=flat-square)](LICENSE)
 [![Twitter Follow](https://img.shields.io/badge/Follow-%40keaistrata-silver?style=flat-square&logo=x)](https://x.com/keaistrata)
